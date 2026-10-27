@@ -1,0 +1,544 @@
+# ==============================================================================
+# Hermes Agent course stack
+#
+#   omniroute   AI gateway       -> one OpenAI-compatible endpoint, many upstreams
+#   hindsight   memory server    -> knowledge-graph long-term memory (self-hosted)
+#   hermes      the agent        -> talks to omniroute for inference, hindsight for
+#                                   memory, and serves the Web UI on :9119 itself
+#                                   (s6 supervises gateway + dashboard in one
+#                                   container; there is no separate service)
+#
+# Data flow:
+#   hermes --(/v1/chat/completions)--> omniroute --> upstream LLM providers
+#   hermes --(/v1 memory REST)------> hindsight  --> embedded PostgreSQL + pgvector
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # OmniRoute — OpenAI-compatible AI gateway (dashboard + /v1 endpoint)
+  # ----------------------------------------------------------------------------
+  omniroute:
+    image: ${OMNIROUTE_IMAGE:-ghcr.io/diegosouzapw/omniroute:latest}
+    container_name: ${CONTAINER_NAME:-hermes-agent}-gtw
+    restart: unless-stopped
+    networks: [hermes-net]
+    ports:
+      # OmniRoute Web Dashboard & OpenAI-compatible gateway endpoint
+      - "${OMNIROUTE_PORT:-20128}:20128"
+    volumes:
+      - ${OMNIROUTE_DATA_DIR:-./data-gtw}:/app/data
+    environment:
+      - REQUIRE_API_KEY=${OMNIROUTE_REQUIRE_API_KEY:-false}
+      - INITIAL_PASSWORD=${OMNIROUTE_INITIAL_PASSWORD:-omniroute-admin}
+      - PORT=20128
+      # Where the Chromium build lives in the browser-enabled image
+      # (docker/Dockerfile.omniroute). The cloudflare-playground keyless
+      # provider drives a real browser; without it, free combos 503.
+      # Harmless when running the plain upstream image.
+      - PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/ms-playwright}
+      # Keep tos:avoid providers (e.g. Kiro) out of auto routing.
+      - EXCLUDE_TOS_AVOID=${OMNIROUTE_EXCLUDE_TOS_AVOID:-true}
+
+  # ----------------------------------------------------------------------------
+  # Hindsight — self-hosted long-term memory server (Vectorize)
+  #   8888 = REST API + per-bank MCP endpoint at /mcp/{bank_id}/
+  #   9999 = memory explorer UI (browse the knowledge graph)
+  #
+  # The single-container image bundles PostgreSQL + pgvector; its data lives in
+  # /home/hindsight/.pg0. That path is a Docker NAMED VOLUME by default, not a
+  # bind mount, because PostgreSQL on a macOS virtiofs bind mount is both slow
+  # and fsync-unsafe. Override HINDSIGHT_DATA_VOLUME with a path (e.g.
+  # ./data-hindsight) if you want it on the host anyway.
+  #
+  # HINDSIGHT_API_LLM_* configures the model Hindsight uses to EXTRACT entities
+  # and SYNTHESIZE reflections. It is independent of the model Hermes chats with.
+  #
+  # By default it is pointed at OmniRoute, so the whole stack needs exactly one
+  # upstream credential (configured once in the OmniRoute dashboard) and all
+  # three components share it. Embeddings and reranking run locally inside this
+  # container — no external call for those.
+  #
+  # NOTE: Hindsight REFUSES TO BOOT with an empty HINDSIGHT_API_LLM_API_KEY
+  # ("ValueError: LLM API key is required"). It only checks that the value is
+  # non-empty at startup, so the OmniRoute key satisfies it.
+  # ----------------------------------------------------------------------------
+  hindsight:
+    image: ${HINDSIGHT_IMAGE:-ghcr.io/vectorize-io/hindsight}:${HINDSIGHT_VERSION:-latest}
+    container_name: ${CONTAINER_NAME:-hermes-agent}-hindsight
+    restart: unless-stopped
+    networks: [hermes-net]
+    depends_on:
+      omniroute:
+        condition: service_started
+    ports:
+      - "${HINDSIGHT_API_PORT:-8888}:8888"
+      - "${HINDSIGHT_UI_PORT:-9999}:9999"
+    volumes:
+      - ${HINDSIGHT_DATA_VOLUME:-hindsight-pgdata}:/home/hindsight/.pg0
+    environment:
+      - HINDSIGHT_API_LLM_PROVIDER=${HINDSIGHT_API_LLM_PROVIDER:-openai}
+      - HINDSIGHT_API_LLM_BASE_URL=${HINDSIGHT_API_LLM_BASE_URL:-http://omniroute:20128/v1}
+      - HINDSIGHT_API_LLM_API_KEY=${HINDSIGHT_API_LLM_API_KEY:-${GTW_API_KEY:-omniroute-local}}
+      - HINDSIGHT_API_LLM_MODEL=${HINDSIGHT_API_LLM_MODEL:-auto/best-free}
+      # Enables POST /v1/default/banks/{bank}/health/llm, which makes a real
+      # call through to the configured LLM. `make hindsight-llm-check` uses it
+      # to prove the Hindsight -> OmniRoute -> upstream leg end to end.
+      - HINDSIGHT_API_ENABLE_BANK_LLM_HEALTH=${HINDSIGHT_API_ENABLE_BANK_LLM_HEALTH:-true}
+      # ---- Consolidation ------------------------------------------------------
+      # Consolidation (merging/deduping memories) asks the LLM for a strict JSON
+      # object {"creates":[...],"updates":[...],"deletes":[...]}. Getting it wrong
+      # raises:
+      #   ValidationError: 1 validation error for
+      #   _ConstrainedConsolidationBatchResponse
+      #   Input should be a valid dictionary ... input_type=list
+      #
+      # The cause is MODEL-SPECIFIC, not provider-wide. glm-5.2 (which
+      # auto/best-free routes to) parrots the input facts back as a bare list
+      # instead of emitting actions. Other KEYLESS models on the same gateway
+      # return a correct object -- verified with a json_object probe:
+      #   cfp/openai/gpt-oss-120b                 -> dict with "creates"  OK
+      #   cfp/deepseek-ai/deepseek-v4-flash-0731  -> dict with "creates"  OK
+      #
+      # So consolidation is PINNED to a specific capable model rather than left
+      # on the auto/* combo, which could reselect glm-5.2 at any time. This is
+      # also why ENABLE_AUTO_CONSOLIDATION is back to true: disabling it did NOT
+      # stop consolidation (a background worker poller claims consolidation
+      # tasks independently of that flag), it only suppressed the inline
+      # post-retain trigger.
+      - HINDSIGHT_API_ENABLE_AUTO_CONSOLIDATION=${HINDSIGHT_API_ENABLE_AUTO_CONSOLIDATION:-true}
+      - HINDSIGHT_API_CONSOLIDATION_LLM_PROVIDER=${HINDSIGHT_API_CONSOLIDATION_LLM_PROVIDER:-openai}
+      - HINDSIGHT_API_CONSOLIDATION_LLM_BASE_URL=${HINDSIGHT_API_CONSOLIDATION_LLM_BASE_URL:-http://omniroute:20128/v1}
+      - HINDSIGHT_API_CONSOLIDATION_LLM_API_KEY=${HINDSIGHT_API_CONSOLIDATION_LLM_API_KEY:-${GTW_API_KEY:-omniroute-local}}
+      - HINDSIGHT_API_CONSOLIDATION_LLM_MODEL=${HINDSIGHT_API_CONSOLIDATION_LLM_MODEL:-cfp/deepseek-ai/deepseek-v4-flash-0731}
+      # A reasoning-heavy model (e.g. gpt-oss-120b) spends its whole OUTPUT
+      # budget thinking and then gets truncated by the playground provider's
+      # output cap, which surfaces as:
+      #   non-retryable OutputTooLongError: LLM output exceeded token limits
+      #   (scope=consolidation). Input may need to be split into smaller chunks.
+      # Hindsight does not cap it (DEFAULT_CONSOLIDATION_MAX_COMPLETION_TOKENS
+      # is None) -- the upstream does, so raising it does not help. Use a
+      # low-reasoning "flash" model and keep the per-call batch small so the
+      # required JSON stays short.
+      - HINDSIGHT_API_CONSOLIDATION_LLM_REASONING_EFFORT=${HINDSIGHT_API_CONSOLIDATION_LLM_REASONING_EFFORT:-low}
+      - HINDSIGHT_API_CONSOLIDATION_LLM_BATCH_SIZE=${HINDSIGHT_API_CONSOLIDATION_LLM_BATCH_SIZE:-2}
+      # ---- OpenTelemetry tracing -> Langfuse -----------------------------------
+      # Hindsight ships its own OTel wiring (hindsight_api/tracing.py): a
+      # FastAPI instrumentor plus an OTLP/HTTP span exporter behind a
+      # BatchSpanProcessor. It emits TRACES only -- there is no metrics pipeline
+      # in the image, and `OTEL_TRACES_ENABLED` is the only on switch.
+      #
+      # BOTH the flag and the endpoint must be set or tracing silently no-ops:
+      #   if not config.otel_traces_enabled or not config.otel_exporter_otlp_endpoint: return
+      #
+      # The endpoint is a BASE url. tracing.py appends /v1/traces itself:
+      #   otlp_endpoint = endpoint if endpoint.endswith("/v1/traces") else f"{endpoint}/v1/traces"
+      # so point this at /api/public/otel and let it add the suffix. Appending
+      # /v1/traces here by hand also works; appending it twice does not.
+      #
+      # Auth is a comma-separated header string, split on the FIRST "=" per pair,
+      # so base64 padding in the value survives. Langfuse wants HTTP Basic with
+      # base64(public_key:secret_key) -- `make langfuse-otel-header` writes it.
+      #
+      # There is deliberately NO depends_on for langfuse here: the exporter
+      # retries in the background, so a Langfuse outage must not be able to take
+      # long-term memory down with it. Spans buffered during an outage are
+      # dropped once the queue fills; memory itself keeps working.
+      - HINDSIGHT_API_OTEL_TRACES_ENABLED=${HINDSIGHT_API_OTEL_TRACES_ENABLED:-true}
+      - HINDSIGHT_API_OTEL_EXPORTER_OTLP_ENDPOINT=${HINDSIGHT_API_OTEL_EXPORTER_OTLP_ENDPOINT:-http://langfuse-web:3000/api/public/otel}
+      - HINDSIGHT_API_OTEL_EXPORTER_OTLP_HEADERS=${HINDSIGHT_API_OTEL_EXPORTER_OTLP_HEADERS:-}
+      - HINDSIGHT_API_OTEL_SERVICE_NAME=${HINDSIGHT_API_OTEL_SERVICE_NAME:-hindsight-api}
+      - HINDSIGHT_API_OTEL_DEPLOYMENT_ENVIRONMENT=${HINDSIGHT_API_OTEL_DEPLOYMENT_ENVIRONMENT:-hermes-course}
+      # Probe traffic would otherwise dominate the trace stream. Hindsight
+      # defaults this to "health,metrics"; set it explicitly so the default is
+      # visible rather than buried in http.py.
+      - OTEL_PYTHON_FASTAPI_EXCLUDED_URLS=${OTEL_PYTHON_FASTAPI_EXCLUDED_URLS:-health,metrics}
+    healthcheck:
+      # /health/ready reports ok once PostgreSQL is migrated and the engine is up.
+      # (/health and /health/live are also served on 8888.)
+      # NB: this image ships NEITHER curl NOR wget -- use its own interpreter.
+      test: ["CMD-SHELL", "/app/api/.venv/bin/python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8888/health/ready', timeout=5).status==200 else 1)\""]
+      interval: 10s
+      timeout: 10s
+      retries: 40
+      start_period: 180s
+
+  # ----------------------------------------------------------------------------
+  # Hermes Agent — the agent itself (gateway process + OpenAI-compatible API)
+  # ----------------------------------------------------------------------------
+  hermes:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BASE_IMAGE: ${HERMES_IMAGE:-nousresearch/hermes-agent:stable}
+    image: ${HERMES_IMAGE_TAG:-hermes-agent-local:latest}
+    container_name: ${CONTAINER_NAME:-hermes-agent}
+    restart: unless-stopped
+    networks: [hermes-net]
+    depends_on:
+      omniroute:
+        condition: service_started
+      hindsight:
+        condition: service_healthy
+    ports:
+      # API Server (OpenAI-compatible)
+      - "${API_SERVER_PORT:-8642}:8642"
+      # Hermes Web Dashboard, served by the s6-supervised dashboard service
+      # inside THIS container (see HERMES_DASHBOARD below)
+      - "${DASHBOARD_PORT:-9119}:9119"
+    volumes:
+      # Persistent state and configuration mapped directly to /opt/data
+      - ${DATA_DIR:-./data}:/opt/data
+      # Workspace directory for projects, input/output files
+      - ${WORKSPACE_DIR:-./workspace}:/workspace
+      # Plugin dependency environments MUST live on a case-sensitive filesystem.
+      # The macOS bind mount above is case-INSENSITIVE, and Hermes copies a
+      # Python toolchain containing both share/terminfo/a and share/terminfo/A
+      # into this directory — they collide and plugin installs fail. A named
+      # volume is ext4 inside the Docker VM, so the collision disappears.
+      - hermes-installs:/opt/data/installs
+    environment:
+      - HERMES_UID=${HERMES_UID:-1000}
+      - HERMES_GID=${HERMES_GID:-1000}
+      - HERMES_HOME=/opt/data
+      - API_SERVER_HOST=0.0.0.0
+      - API_SERVER_PORT=8642
+      - API_SERVER_ENABLED=${API_SERVER_ENABLED:-false}
+      - API_SERVER_KEY=${API_SERVER_KEY:-}
+      # ---- Web dashboard, in THIS container ----------------------------------
+      # The official image is s6-overlay supervised: `gateway run` is redirected
+      # to the supervised service, which also starts a dashboard when
+      # HERMES_DASHBOARD is truthy (1|true|yes). That is why there is no longer
+      # a separate `dashboard` service -- two containers sharing one /opt/data
+      # meant two writers against the same SQLite/WAL files and two gateway
+      # supervisors over one gateway.sock.
+      # A non-loopback bind REQUIRES an auth provider or the server fails
+      # closed; HERMES_DASHBOARD_INSECURE is accepted but ignored since the
+      # June 2026 hardening. Basic auth below satisfies the gate.
+      - HERMES_DASHBOARD=${HERMES_DASHBOARD:-1}
+      - HERMES_DASHBOARD_HOST=0.0.0.0
+      - HERMES_DASHBOARD_PORT=9119
+      - HERMES_DASHBOARD_BASIC_AUTH_USERNAME=${DASHBOARD_USERNAME:-admin}
+      - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${DASHBOARD_PASSWORD:-hermes-admin}
+      # ---- Inference via OmniRoute -------------------------------------------
+      # GTW_* is the Hermes "tool gateway" convention; CUSTOM_API_KEY is what
+      # model.provider "custom" actually reads as its bearer token (resolution
+      # order: model.api_key -> CUSTOM_API_KEY -> OPENAI_API_KEY ->
+      # OPENROUTER_API_KEY). Flip routing with `make provider-omniroute` /
+      # `make provider-direct`.
+      - GTW_BASE_URL=http://omniroute:20128/v1
+      - GTW_API_KEY=${GTW_API_KEY:-omniroute-local}
+      - CUSTOM_API_KEY=${GTW_API_KEY:-omniroute-local}
+      # ---- Long-term memory via Hindsight ------------------------------------
+      # local_external -> talk to the self-hosted hindsight service above.
+      # Override HINDSIGHT_MODE/HINDSIGHT_API_URL in .env to point at Vectorize
+      # cloud or your own remote instance instead.
+      - HINDSIGHT_MODE=${HINDSIGHT_MODE:-local_external}
+      - HINDSIGHT_API_URL=${HINDSIGHT_API_URL:-http://hindsight:8888}
+      - HINDSIGHT_API_KEY=${HINDSIGHT_API_KEY:-}
+      - HINDSIGHT_BANK_ID=${HINDSIGHT_BANK_ID:-hermes-course}
+      - HINDSIGHT_LLM_API_KEY=${HINDSIGHT_API_LLM_API_KEY:-}
+      # Langfuse SDK credentials for prompt management and Hermes-side spans/scores.
+      # The same project keys authenticate Hindsight's OTLP exporter above.
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL:-http://langfuse-web:3000}
+      - LANGFUSE_RELEASE=${LANGFUSE_RELEASE:-hermes-course}
+      - HINDSIGHT_LANGFUSE_ENABLED=${HINDSIGHT_LANGFUSE_ENABLED:-true}
+      # Bot credentials passed if defined
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
+      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN:-}
+    # Do NOT add --no-supervise here: that opts out of s6 and makes the gateway
+    # the container's only process, which would also disable the dashboard.
+    command: ["gateway", "run"]
+
+  # ============================================================================
+  # Langfuse — OTLP trace sink and LLM observability UI
+  #
+  # Langfuse v4 is NOT a single container. It is a web app + an async ingestion
+  # worker over four stores, and all six are required:
+  #
+  #   langfuse-web         :3000  UI + the OTLP endpoint Hindsight posts to
+  #   langfuse-worker      :3030  drains the ingestion queue into ClickHouse
+  #   langfuse-postgres    :5432  transactional data (orgs, projects, API keys)
+  #   langfuse-clickhouse  :8123  the actual trace/span store
+  #   langfuse-redis       :6379  ingestion queue + cache
+  #   langfuse-minio       :9000  S3 blob storage for raw ingestion events
+  #
+  # WHAT THIS DOES AND DOES NOT COLLECT
+  #   Langfuse ingests OTLP *traces* (spans). It is not a metrics backend --
+  #   there is no Prometheus-style metric storage here, and Hindsight does not
+  #   emit OTel metrics in the first place (it only has a traces pipeline). If
+  #   you later want real counters/gauges, put otel/opentelemetry-collector in
+  #   front and fan metrics out to Prometheus; traces keep flowing here.
+  #
+  # COST: ClickHouse alone reserves ~1 GB RAM. With Hermes, OmniRoute (which
+  # carries Chromium) and Hindsight (which carries its own PostgreSQL) already
+  # running, this roughly doubles the stack's footprint. Drop the whole group
+  # with `make langfuse-down`, or set HINDSIGHT_API_OTEL_TRACES_ENABLED=false to
+  # keep it off for good.
+  # ============================================================================
+  langfuse-postgres:
+    image: ${LANGFUSE_POSTGRES_IMAGE:-postgres:17}
+    container_name: ${CONTAINER_NAME:-hermes-agent}-lf-postgres
+    restart: unless-stopped
+    networks: [hermes-net]
+    environment:
+      - POSTGRES_USER=${LANGFUSE_POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local}
+      - POSTGRES_DB=${LANGFUSE_POSTGRES_DB:-langfuse}
+    volumes:
+      - langfuse-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LANGFUSE_POSTGRES_USER:-postgres} -d ${LANGFUSE_POSTGRES_DB:-langfuse}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  langfuse-clickhouse:
+    # 25.12, NOT 25.4. Langfuse v4's ClickHouse migration 0039_create_events_full
+    # declares full-text indexes as
+    #   INDEX idx_fts_input_low lower(input) TYPE text(tokenizer = splitByNonAlpha)
+    # and that named-argument form is rejected by older servers with
+    #   Code: 80. DB::Exception: Only literals can be skip index arguments.
+    # The migrator then flags version 39 dirty and langfuse-web crash-loops on
+    # "Dirty database version 39" forever after. Verified: 25.4 fails this DDL,
+    # 25.12 accepts it. Do not downgrade without re-testing that migration.
+    image: ${LANGFUSE_CLICKHOUSE_IMAGE:-clickhouse/clickhouse-server:25.12}
+    container_name: ${CONTAINER_NAME:-hermes-agent}-lf-clickhouse
+    restart: unless-stopped
+    networks: [hermes-net]
+    user: "101:101"
+    environment:
+      - CLICKHOUSE_DB=default
+      - CLICKHOUSE_USER=${LANGFUSE_CLICKHOUSE_USER:-clickhouse}
+      - CLICKHOUSE_PASSWORD=${LANGFUSE_CLICKHOUSE_PASSWORD:-langfuse-local}
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+      - langfuse-clickhouse-logs:/var/log/clickhouse-server
+    ulimits:
+      # ClickHouse opens a lot of files; the Docker default (1024) makes it
+      # log "Too many open files" and degrade under even light ingestion.
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+  langfuse-redis:
+    image: ${LANGFUSE_REDIS_IMAGE:-redis:7}
+    container_name: ${CONTAINER_NAME:-hermes-agent}-lf-redis
+    restart: unless-stopped
+    networks: [hermes-net]
+    # Langfuse refuses an unauthenticated Redis, so a password is mandatory
+    # even on a private compose network.
+    command: ["redis-server", "--requirepass", "${LANGFUSE_REDIS_PASSWORD:-langfuse-local}", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"${LANGFUSE_REDIS_PASSWORD:-langfuse-local}\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  langfuse-minio:
+    image: ${LANGFUSE_MINIO_IMAGE:-cgr.dev/chainguard/minio:latest}
+    container_name: ${CONTAINER_NAME:-hermes-agent}-lf-minio
+    restart: unless-stopped
+    networks: [hermes-net]
+    # MinIO's filesystem backend treats each top-level directory under the data
+    # root as a bucket, so `mkdir -p /data/<bucket>` IS bucket creation. That
+    # avoids a separate `mc mb` init container just to make one bucket.
+    entrypoint: ["sh", "-c"]
+    command:
+      - 'mkdir -p /data/${LANGFUSE_S3_BUCKET:-langfuse} && exec minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      - MINIO_ROOT_USER=${LANGFUSE_S3_ACCESS_KEY:-minio}
+      - MINIO_ROOT_PASSWORD=${LANGFUSE_S3_SECRET_KEY:-langfuse-local}
+      # Pre-seeds an `mc` alias so the healthcheck below needs no setup step.
+      - MC_HOST_local=http://${LANGFUSE_S3_ACCESS_KEY:-minio}:${LANGFUSE_S3_SECRET_KEY:-langfuse-local}@localhost:9000
+    volumes:
+      - langfuse-miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  langfuse-worker:
+    image: ${LANGFUSE_WORKER_IMAGE:-docker.langfuse.com/langfuse/langfuse-worker}:${LANGFUSE_VERSION:-4}
+    container_name: ${CONTAINER_NAME:-hermes-agent}-lf-worker
+    restart: unless-stopped
+    networks: [hermes-net]
+    depends_on:
+      # langfuse-web, NOT the stores directly. The WEB image owns every
+      # migration: its entrypoint runs the Prisma (PostgreSQL) migrations and
+      # the ClickHouse migrations. The worker's entrypoint runs NONE -- it only
+      # builds DATABASE_URL and execs. Start the worker against an unmigrated
+      # database and it spins forever on
+      #   relation "monitors" does not exist
+      #   The table `public.batch_actions` does not exist
+      # so it must wait until web reports healthy, i.e. migrations are done.
+      langfuse-web:
+        condition: service_healthy
+    environment:
+      # ---- Transactional store ------------------------------------------------
+      - DATABASE_URL=postgresql://${LANGFUSE_POSTGRES_USER:-postgres}:${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local}@langfuse-postgres:5432/${LANGFUSE_POSTGRES_DB:-langfuse}
+      # ---- Trace store --------------------------------------------------------
+      # CLICKHOUSE_URL is the native HTTP interface; CLICKHOUSE_MIGRATION_URL is
+      # the TCP protocol used by the schema migrator. They are different ports
+      # and both are required -- the worker runs migrations on boot.
+      - CLICKHOUSE_URL=http://langfuse-clickhouse:8123
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://langfuse-clickhouse:9000
+      - CLICKHOUSE_USER=${LANGFUSE_CLICKHOUSE_USER:-clickhouse}
+      - CLICKHOUSE_PASSWORD=${LANGFUSE_CLICKHOUSE_PASSWORD:-langfuse-local}
+      - CLICKHOUSE_CLUSTER_ENABLED=false
+      # ---- Queue / cache ------------------------------------------------------
+      - REDIS_CONNECTION_STRING=redis://:${LANGFUSE_REDIS_PASSWORD:-langfuse-local}@langfuse-redis:6379
+      # ---- Raw event blob storage --------------------------------------------
+      # FORCE_PATH_STYLE is required for MinIO: without it the SDK builds
+      # virtual-host URLs (bucket.host) that MinIO does not serve.
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=${LANGFUSE_S3_BUCKET:-langfuse}
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=http://langfuse-minio:9000
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=${LANGFUSE_S3_ACCESS_KEY:-minio}
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=${LANGFUSE_S3_SECRET_KEY:-langfuse-local}
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=${LANGFUSE_S3_REGION:-us-east-1}
+      - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
+      - LANGFUSE_S3_EVENT_UPLOAD_PREFIX=events/
+      # ---- Crypto -------------------------------------------------------------
+      # ENCRYPTION_KEY must be EXACTLY 64 hex characters (32 bytes) or the app
+      # refuses to boot. SALT hashes API keys. Rotating either one strands the
+      # data encrypted under the old value -- `make langfuse-secrets` generates
+      # both, and changing them later means starting the stores over.
+      - SALT=${LANGFUSE_SALT:-langfuse-local-salt-change-me}
+      - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      - TELEMETRY_ENABLED=${LANGFUSE_TELEMETRY_ENABLED:-false}
+    healthcheck:
+      # $$HOSTNAME for the same reason as langfuse-web: the worker also binds
+      # only to the interface its HOSTNAME env resolves to, so 127.0.0.1 is
+      # refused inside its own container.
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://$$HOSTNAME:3030/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+
+  langfuse-web:
+    image: ${LANGFUSE_WEB_IMAGE:-docker.langfuse.com/langfuse/langfuse}:${LANGFUSE_VERSION:-4}
+    container_name: ${CONTAINER_NAME:-hermes-agent}-lf-web
+    restart: unless-stopped
+    networks: [hermes-net]
+    depends_on:
+      # Web is the migration owner, so it waits only on the four stores. Do NOT
+      # make this wait on langfuse-worker: the worker needs the schema that web
+      # creates, so gating web on the worker deadlocks the stack.
+      #
+      # "healthy" here is necessary but not always sufficient for ClickHouse:
+      # /ping answers before the server finishes opening its keeper/metadata
+      # paths, and a migration that starts in that window can die partway and
+      # leave the migrator's bookkeeping row flagged dirty:
+      #   error: Dirty database version 39. Fix and force version.
+      # which then crash-loops web on every restart. start_period on the
+      # ClickHouse healthcheck is what keeps that window closed; if you ever see
+      # that error, `make langfuse-reset` clears the stores and re-migrates.
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+    ports:
+      - "${LANGFUSE_PORT:-3000}:3000"
+    environment:
+      # Everything the worker needs, plus the web-only settings below.
+      - DATABASE_URL=postgresql://${LANGFUSE_POSTGRES_USER:-postgres}:${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local}@langfuse-postgres:5432/${LANGFUSE_POSTGRES_DB:-langfuse}
+      - CLICKHOUSE_URL=http://langfuse-clickhouse:8123
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://langfuse-clickhouse:9000
+      - CLICKHOUSE_USER=${LANGFUSE_CLICKHOUSE_USER:-clickhouse}
+      - CLICKHOUSE_PASSWORD=${LANGFUSE_CLICKHOUSE_PASSWORD:-langfuse-local}
+      - CLICKHOUSE_CLUSTER_ENABLED=false
+      - REDIS_CONNECTION_STRING=redis://:${LANGFUSE_REDIS_PASSWORD:-langfuse-local}@langfuse-redis:6379
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=${LANGFUSE_S3_BUCKET:-langfuse}
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=http://langfuse-minio:9000
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=${LANGFUSE_S3_ACCESS_KEY:-minio}
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=${LANGFUSE_S3_SECRET_KEY:-langfuse-local}
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=${LANGFUSE_S3_REGION:-us-east-1}
+      - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
+      - LANGFUSE_S3_EVENT_UPLOAD_PREFIX=events/
+      - SALT=${LANGFUSE_SALT:-langfuse-local-salt-change-me}
+      - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      - TELEMETRY_ENABLED=${LANGFUSE_TELEMETRY_ENABLED:-false}
+      # ---- Web / auth ---------------------------------------------------------
+      # NEXTAUTH_URL must match the URL YOU open in the browser, not the
+      # in-network hostname, or the login redirect bounces.
+      - NEXTAUTH_URL=${LANGFUSE_NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-langfuse-local-nextauth-change-me}
+      # NOTE: LANGFUSE_INIT_PROJECT_RETENTION is deliberately NOT set here.
+      # Leaving it unset means "keep traces indefinitely". It is validated as a
+      # number >= 3 (days), so there is no "0 means forever" value -- passing 0
+      # fails startup outright with
+      #   ❌ Invalid environment variables: { LANGFUSE_INIT_PROJECT_RETENTION:
+      #      [ 'Too small: expected number to be >=3' ] }
+      # Add it back with a value of 3 or more only if you want auto-deletion.
+      # ---- Headless bootstrap -------------------------------------------------
+      # Without these, a fresh Langfuse has no org, no project and no API keys,
+      # so Hindsight has nowhere to post and you cannot build the Basic auth
+      # header until you have clicked through the signup UI. Seeding them makes
+      # the OTLP path work on the FIRST `make up` with no manual step.
+      # These are applied only when the database is empty; they do not rewrite
+      # an existing project's keys.
+      - LANGFUSE_INIT_ORG_ID=${LANGFUSE_INIT_ORG_ID:-hermes-course}
+      - LANGFUSE_INIT_ORG_NAME=${LANGFUSE_INIT_ORG_NAME:-Hermes Course}
+      - LANGFUSE_INIT_PROJECT_ID=${LANGFUSE_INIT_PROJECT_ID:-hermes-course}
+      - LANGFUSE_INIT_PROJECT_NAME=${LANGFUSE_INIT_PROJECT_NAME:-Hermes Course}
+      - LANGFUSE_INIT_PROJECT_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-hermes-course}
+      - LANGFUSE_INIT_PROJECT_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-hermes-course}
+      - LANGFUSE_INIT_USER_EMAIL=${LANGFUSE_INIT_USER_EMAIL:-admin@hermes.local}
+      - LANGFUSE_INIT_USER_NAME=${LANGFUSE_INIT_USER_NAME:-Admin}
+      - LANGFUSE_INIT_USER_PASSWORD=${LANGFUSE_INIT_USER_PASSWORD:-hermes-admin}
+    healthcheck:
+      # Gates langfuse-worker. Going healthy means the entrypoint finished the
+      # Prisma and ClickHouse migrations and the app is serving, which is
+      # exactly the precondition the worker needs.
+      # start_period is generous: 457 Prisma migrations plus the ClickHouse set
+      # on a cold volume take a while, and a premature failure here would
+      # restart the container mid-migration.
+      #
+      # $$HOSTNAME, not 127.0.0.1. Next.js standalone binds to the interface its
+      # HOSTNAME env resolves to, and Docker sets HOSTNAME to the container id,
+      # so the server listens on the container's eth0 address ONLY -- loopback
+      # gets "Connection refused" even while the published port serves 200.
+      # The doubled $$ escapes compose's own interpolation so the container
+      # shell is the one that expands it.
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://$$HOSTNAME:3000/api/public/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 40
+      start_period: 180s
+
+networks:
+  hermes-net:
+    driver: bridge
+
+volumes:
+  # Hindsight's embedded PostgreSQL data (see note on the hindsight service).
+  hindsight-pgdata:
+  # Hermes plugin dependency environments (see note on the hermes service).
+  hermes-installs:
+  # ---- Langfuse stores -------------------------------------------------------
+  # Named volumes rather than bind mounts for the same reason as Hindsight's
+  # pgdata: PostgreSQL and ClickHouse on a macOS virtiofs bind mount are slow
+  # and fsync-unsafe. `make langfuse-destroy` is what clears these.
+  langfuse-pgdata:
+  langfuse-clickhouse-data:
+  langfuse-clickhouse-logs:
+  langfuse-miniodata:

@@ -1,0 +1,2481 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Hermes Agent Docker Guide & Demo Walkthrough</title>
+<meta name="description" content="Visual guide and step-by-step interactive demos for running Nous Research Hermes Agent in Docker with Makefile, volume sync, profiles, and bots.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   HERMES DESIGN SYSTEM — tokens
+   Character: warm paper neutrals, deep teal primary, terracotta accent,
+   editorial serif headings paired with a neutral humanist sans.
+   ========================================================================== */
+:root {
+  color-scheme: light;
+
+  /* Color: primary (deep teal) */
+  --color-primary: #0E6B63;
+  --color-primary-hover: #0A554F;
+  --color-primary-active: #073F3A;
+  --color-primary-subtle: #E1F1EE;
+  --color-on-primary: #FFFFFF;
+
+  /* Color: secondary (terracotta) */
+  --color-secondary: #A8481F;
+  --color-secondary-hover: #8A3A18;
+  --color-secondary-subtle: #FBEBE3;
+  --color-on-secondary: #FFFFFF;
+
+  /* Color: neutral ramp (warm paper to ink) */
+  --color-neutral-50: #FAF8F5;
+  --color-neutral-100: #F2EFEA;
+  --color-neutral-200: #E4E0D8;
+  --color-neutral-300: #CFCAC0;
+  --color-neutral-400: #A19B90;
+  --color-neutral-500: #7A746A;
+  --color-neutral-600: #5C574E;
+  --color-neutral-700: #433F38;
+  --color-neutral-800: #2B2824;
+  --color-neutral-900: #1A1815;
+  --color-white: #FFFFFF;
+
+  /* Color: semantic */
+  --color-success: #1B7A3A;
+  --color-success-subtle: #E2F4E8;
+  --color-warning: #805000;
+  --color-warning-subtle: #FFF1CC;
+  --color-error: #B3261E;
+  --color-error-subtle: #FBE5E3;
+  --color-info: #1D5CA8;
+  --color-info-subtle: #E1ECF9;
+
+  /* Color: roles */
+  --color-bg: var(--color-neutral-50);
+  --color-surface: var(--color-white);
+  --color-surface-sunken: var(--color-neutral-100);
+  --color-text: var(--color-neutral-900);
+  --color-text-muted: var(--color-neutral-600);
+  --color-border: var(--color-neutral-200);
+  --color-border-strong: var(--color-neutral-500);
+  --color-focus: var(--color-primary);
+  --color-disabled-bg: var(--color-neutral-200);
+  --color-disabled-text: var(--color-neutral-600);
+
+  /* Typography: families and weights */
+  --font-family-primary: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-family-secondary: "Fraunces", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-family-mono: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Typography: scale (mobile first; raised at >= 48em) */
+  --font-size-h1: 2.25rem;
+  --font-size-h2: 1.875rem;
+  --font-size-h3: 1.5rem;
+  --font-size-h4: 1.25rem;
+  --font-size-h5: 1.125rem;
+  --font-size-h6: 1rem;
+  --font-size-p: 1rem;
+  --font-size-small: 0.875rem;
+  --line-height-tight: 1.15;
+  --line-height-heading: 1.25;
+  --line-height-body: 1.6;
+  --line-height-small: 1.45;
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-caps: 0.08em;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  --spacing-3xl: 64px;
+  --spacing-gutter: 16px;
+
+  /* Sizing */
+  --size-control-sm: 36px;
+  --size-control-md: 44px;
+  --size-control-lg: 52px;
+  --size-container: 72rem;
+  --size-measure: 65ch;
+  --size-swatch: 72px;
+
+  /* Borders and radii */
+  --border-width: 1px;
+  --border-width-strong: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* Focus */
+  --focus-ring-width: 3px;
+  --focus-ring-offset: 2px;
+
+  /* Elevation */
+  --shadow-low: 0 1px 2px rgb(26 24 21 / 0.08), 0 1px 1px rgb(26 24 21 / 0.04);
+  --shadow-medium: 0 4px 12px rgb(26 24 21 / 0.10), 0 2px 4px rgb(26 24 21 / 0.06);
+  --shadow-high: 0 16px 32px rgb(26 24 21 / 0.16), 0 4px 8px rgb(26 24 21 / 0.08);
+
+  /* Motion */
+  --duration-fast: 150ms;
+  --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Layering */
+  --z-header: 10;
+}
+
+@media (min-width: 48em) {
+  :root {
+    --font-size-h1: 3.5rem;
+    --font-size-h2: 2.5rem;
+    --font-size-h3: 1.75rem;
+    --spacing-gutter: 24px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --color-primary: #56D0C0;
+    --color-primary-hover: #7CE0D2;
+    --color-primary-active: #A3EBE1;
+    --color-primary-subtle: #12332F;
+    --color-on-primary: #06201D;
+
+    --color-secondary: #F0956B;
+    --color-secondary-hover: #F6B08D;
+    --color-secondary-subtle: #3A2318;
+    --color-on-secondary: #2A1208;
+
+    --color-success: #5FD08A;
+    --color-success-subtle: #123222;
+    --color-warning: #F2C14E;
+    --color-warning-subtle: #382B0B;
+    --color-error: #FF8A80;
+    --color-error-subtle: #3D1916;
+    --color-info: #7FB4F0;
+    --color-info-subtle: #14283F;
+
+    --color-bg: #121615;
+    --color-surface: #1B2120;
+    --color-surface-sunken: #0D1110;
+    --color-text: #F2EFEA;
+    --color-text-muted: #B5B0A5;
+    --color-border: #333B39;
+    --color-border-strong: #7F8A87;
+    --color-disabled-bg: #2A3130;
+    --color-disabled-text: #9AA3A0;
+
+    --shadow-low: 0 1px 2px rgb(0 0 0 / 0.5);
+    --shadow-medium: 0 4px 12px rgb(0 0 0 / 0.5), 0 2px 4px rgb(0 0 0 / 0.4);
+    --shadow-high: 0 16px 32px rgb(0 0 0 / 0.6), 0 4px 8px rgb(0 0 0 / 0.5);
+  }
+}
+
+/* ==========================================================================
+   Page-specific tokens — domain surfaces the design system has no role for.
+   Terminal chrome is intentionally fixed: a terminal is dark in both themes.
+   ========================================================================== */
+:root {
+  /* Terminal / code surface */
+  --color-terminal-bg: #14171A;
+  --color-terminal-border: #2C3238;
+  --color-terminal-header: #1E2328;
+  --color-terminal-rule: #2B313A;
+  --color-terminal-text: #E2E8F0;
+  --color-terminal-title: #9CA3AF;
+  --color-terminal-btn: #A1A7B3;
+  --color-terminal-btn-border: #3E4552;
+  --color-terminal-btn-hover: #2D333F;
+
+  /* Terminal syntax highlighting */
+  --color-syntax-prompt: #10B981;
+  --color-syntax-cmd: #FCD34D;
+  --color-syntax-comment: #6B7280;
+  --color-syntax-val: #60A5FA;
+
+  /* macOS window dots */
+  --color-dot-red: #FF5F56;
+  --color-dot-yellow: #FFBD2E;
+  --color-dot-green: #27C93F;
+
+  /* Brand banner gradient (fixed: white text is set on it) */
+  --gradient-banner: linear-gradient(135deg, #073F3A 0%, #0E6B63 60%, #155E57 100%);
+
+  /* Faint teal wash behind the container diagram */
+  --color-docker-tint: #FAFDFD;
+
+  /* Extra accents retained for this page */
+  --color-accent-blue: #2563EB;
+  --color-accent-purple: #7C3AED;
+}
+
+/* ==========================================================================
+   Compatibility aliases — this page's original token names now resolve to
+   canonical design-system roles, so existing rules keep working unchanged.
+   ========================================================================== */
+:root {
+  --color-primary-dark: var(--color-primary-active);
+  --color-card-bg:      var(--color-surface);
+  --color-ink:          var(--color-text);
+  --color-muted:        var(--color-text-muted);
+  --shadow-sm:          var(--shadow-low);
+  --shadow-md:          var(--shadow-medium);
+  --shadow-lg:          var(--shadow-high);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-family-primary);
+  font-size: var(--font-size-p);
+  font-weight: var(--font-weight-regular);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  line-height: var(--line-height-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+header {
+  background: var(--gradient-banner);
+  color: var(--color-on-primary);
+  padding: 4rem 2rem 3.5rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+header::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(217, 107, 39, 0.25) 0%, rgba(255,255,255,0) 70%);
+  pointer-events: none;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.35rem 0.85rem;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 1.25rem;
+  backdrop-filter: blur(4px);
+}
+
+h1 {
+  font-family: var(--font-family-secondary);
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--letter-spacing-tight);
+  margin-bottom: 1rem;
+}
+
+.subtitle {
+  font-size: 1.15rem;
+  max-width: 760px;
+  margin: 0 auto;
+  /* Paragraphs normally use muted ink; this lives on the dark banner. */
+  color: var(--color-on-primary);
+  opacity: 0.92;
+  font-weight: 400;
+}
+
+.subtitle strong {
+  color: var(--color-on-primary);
+}
+
+.container {
+  max-width: var(--size-container);
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 5rem;
+}
+
+/* Nav jump bar */
+.nav-bar {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: -1.75rem auto 2.5rem;
+  position: relative;
+  z-index: 10;
+}
+
+.nav-pill {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: 0.6rem 1.1rem;
+  border-radius: 999px;
+  text-decoration: none;
+  color: var(--color-text);
+  font-weight: 600;
+  font-size: 0.9rem;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nav-pill:hover {
+  background: var(--color-primary-subtle);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Content cards */
+.section-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 2.5rem;
+  margin-bottom: 2.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.section-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--color-primary-subtle);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+h2 {
+  font-family: var(--font-family-secondary);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+  color: var(--color-primary-active);
+}
+
+h3 {
+  font-size: var(--font-size-h5);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+  margin: 1.25rem 0 0.5rem;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+p {
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+}
+
+/* Visual Figures & Diagrams (SVG/Flex) */
+.diagram-wrapper {
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2rem;
+  margin: 1.75rem 0;
+  position: relative;
+}
+
+.diagram-caption {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  margin-top: 1rem;
+  font-style: italic;
+}
+
+/* Architecture Diagram Graphic */
+.arch-grid {
+  display: grid;
+  grid-template-columns: 1fr 80px 1.4fr;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+@media (max-width: 860px) {
+  .arch-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+.arch-box {
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+
+.arch-box.host {
+  border-color: var(--color-secondary);
+}
+
+.arch-box.host::before {
+  content: "HOST (macOS / Linux)";
+  position: absolute;
+  top: -12px;
+  left: 16px;
+  background: var(--color-secondary);
+  color: var(--color-on-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 99px;
+  text-transform: uppercase;
+}
+
+.arch-box.docker {
+  border-color: var(--color-primary);
+  background: var(--color-docker-tint);
+}
+
+.arch-box.docker::before {
+  content: "DOCKER CONTAINER (hermes-agent)";
+  position: absolute;
+  top: -12px;
+  left: 16px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 99px;
+  text-transform: uppercase;
+}
+
+.arch-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.arch-item code {
+  font-family: var(--font-family-mono);
+  color: var(--color-primary-active);
+  font-weight: 600;
+}
+
+.arch-bridge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.arch-bridge svg {
+  width: 38px;
+  height: 38px;
+  color: var(--color-primary);
+}
+
+/* Code Blocks & Terminal */
+.terminal {
+  background: var(--color-terminal-bg);
+  border: 1px solid var(--color-terminal-border);
+  border-radius: var(--radius-md);
+  margin: 1.25rem 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+
+.terminal-header {
+  background: var(--color-terminal-header);
+  padding: 0.6rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-terminal-rule);
+}
+
+.terminal-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.terminal-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.dot-red { background: var(--color-dot-red); }
+.dot-yellow { background: var(--color-dot-yellow); }
+.dot-green { background: var(--color-dot-green); }
+
+.terminal-title {
+  color: var(--color-terminal-title);
+  font-size: 0.75rem;
+  font-family: var(--font-family-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.terminal-copy {
+  color: var(--color-terminal-btn);
+  font-size: 0.75rem;
+  background: transparent;
+  border: 1px solid var(--color-terminal-btn-border);
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.terminal-copy:hover {
+  background: var(--color-terminal-btn-hover);
+  color: var(--color-white);
+}
+
+pre {
+  padding: 1.25rem;
+  overflow-x: auto;
+  font-family: var(--font-family-mono);
+  font-size: 0.88rem;
+  color: var(--color-terminal-text);
+  line-height: 1.5;
+}
+
+pre .prompt { color: var(--color-syntax-prompt); font-weight: 600; }
+pre .cmd { color: var(--color-syntax-cmd); font-weight: 600; }
+pre .comment { color: var(--color-syntax-comment); font-style: italic; }
+pre .val { color: var(--color-syntax-val); }
+
+/* Demo Steps */
+.demo-step {
+  border-left: 3px solid var(--color-primary);
+  padding-left: 1.5rem;
+  margin: 2rem 0;
+  position: relative;
+}
+
+.demo-step::before {
+  content: attr(data-step);
+  position: absolute;
+  left: -17px;
+  top: -2px;
+  width: 30px;
+  height: 30px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  box-shadow: 0 0 0 4px var(--color-surface);
+}
+
+.demo-step h4 {
+  font-size: var(--font-size-h5);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  margin-bottom: 0.5rem;
+}
+
+.callout {
+  background: var(--color-primary-subtle);
+  border-left: 4px solid var(--color-primary);
+  padding: 1rem 1.25rem;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin: 1rem 0;
+  font-size: 0.92rem;
+  color: var(--color-primary-active);
+}
+
+.callout.warning {
+  background: var(--color-secondary-subtle);
+  border-left-color: var(--color-secondary);
+  color: var(--color-secondary-hover);
+}
+
+/* Command Grid */
+.cmd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.cmd-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  background: var(--color-surface-sunken);
+  transition: all 0.2s ease;
+}
+
+.cmd-card:hover {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.cmd-card-name {
+  font-family: var(--font-family-mono);
+  font-weight: 600;
+  color: var(--color-primary);
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+}
+
+.cmd-card-desc {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+/* Profile comparison table */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 0.9rem;
+}
+
+th, td {
+  padding: 0.85rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+th {
+  background: var(--color-surface-sunken);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary-active);
+}
+
+tr:hover td {
+  background: var(--color-surface-sunken);
+}
+
+footer {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+  border-top: 1px solid var(--color-border);
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="badge">Nous Research Hermes Agent v0.22</div>
+  <h1>Hermes Agent in Docker</h1>
+  <p class="subtitle">Complete visual architectural guide, Makefile lifecycle, volume synchronization, and step-by-step hands-on demos for the full three-service stack: <strong>Hermes</strong> the agent (which also serves the Web dashboard), <strong>OmniRoute</strong> the AI gateway, and <strong>Hindsight</strong> long-term memory &mdash; plus profiles, bots and diagnostics.</p>
+</header>
+
+<div class="container">
+
+  <!-- Quick Navigation -->
+  <nav class="nav-bar">
+    <a href="#architecture" class="nav-pill">🏛️ Architecture & Volumes</a>
+    <a href="#services" class="nav-pill">🔌 Services, Ports & Logins</a>
+    <a href="#makefile" class="nav-pill">⚙️ Makefile Commands</a>
+    <a href="#demo-lifecycle" class="nav-pill">▶️ Demo 1: Create & Destroy</a>
+    <a href="#demo-volumes" class="nav-pill">▶️ Demo 2: File Sync</a>
+    <a href="#demo-profiles" class="nav-pill">▶️ Demo 3: Profiles</a>
+    <a href="#demo-bots" class="nav-pill">▶️ Demo 4: Bots & Gateway</a>
+    <a href="#demo-omniroute" class="nav-pill">🔀 Demo 5: OmniRoute Gateway</a>
+    <a href="#demo-free" class="nav-pill">🆓 Demo 5b: Free Combos</a>
+    <a href="#demo-hindsight" class="nav-pill">🧠 Demo 6: Hindsight Memory</a>
+    <a href="#privacy" class="nav-pill">🔐 Memory Modes & Privacy</a>
+    <a href="#doctor-fixes" class="nav-pill">🩺 Doctor Warnings & Fixes</a>
+  </nav>
+
+  <!-- SECTION 1: Architecture -->
+  <section id="architecture" class="section-card">
+    <div class="section-header">
+      <div class="section-icon">🏛️</div>
+      <div>
+        <h2>System Architecture & Volume Mapping</h2>
+        <p>How the host machine connects to Hermes inside the container</p>
+      </div>
+    </div>
+
+    <p>Hermes Agent running in Docker uses host-mounted volumes to keep configuration, learned skills, personas (<code>SOUL.md</code>), memories, and bot credentials completely persistent and editable locally without entering the container.</p>
+
+    <!-- Visual Diagram Grid -->
+    <div class="diagram-wrapper">
+      <div class="arch-grid">
+        <!-- Host Machine Column -->
+        <div class="arch-box host">
+          <strong style="color:var(--color-secondary); font-size:1.05rem;">Host File System</strong>
+          <div class="arch-item">
+            <span>📁</span>
+            <div>
+              <code>./data/</code>
+              <div style="font-size:0.75rem; color:var(--color-text-muted);">config.yaml, .env, memories, skills</div>
+            </div>
+          </div>
+          <div class="arch-item">
+            <span>📂</span>
+            <div>
+              <code>./workspace/</code>
+              <div style="font-size:0.75rem; color:var(--color-text-muted);">Source code, git repos, documents</div>
+            </div>
+          </div>
+          <div class="arch-item">
+            <span>🏠</span>
+            <div>
+              <code>~/.hermes/</code>
+              <div style="font-size:0.75rem; color:var(--color-text-muted);">Optional host profile (syncable)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bi-directional arrows -->
+        <div class="arch-bridge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+          </svg>
+          <span>Binds</span>
+        </div>
+
+        <!-- Container Column -->
+        <div class="arch-box docker">
+          <strong style="color:var(--color-primary); font-size:1.05rem;">Hermes Container</strong>
+          <div class="arch-item">
+            <span>⚙️</span>
+            <div>
+              <code>/opt/data</code> (HERMES_HOME)
+              <div style="font-size:0.75rem; color:var(--color-text-muted);">State, profiles, databases, sessions</div>
+            </div>
+          </div>
+          <div class="arch-item">
+            <span>💻</span>
+            <div>
+              <code>/workspace</code>
+              <div style="font-size:0.75rem; color:var(--color-text-muted);">Agent sandbox workspace</div>
+            </div>
+          </div>
+          <div class="arch-item">
+            <span>🌐</span>
+            <div>
+              <code>Port 8642 (API)</code> & <code>Port 9119 (Web UI)</code>
+              <div style="font-size:0.75rem; color:var(--color-text-muted);">OpenAI-compatible endpoint + dashboard</div>
+            </div>
+          </div>
+          <div class="arch-item">
+            <span>🔀</span>
+            <div>
+              <code>OmniRoute (gtw)</code>
+              <div style="font-size:0.75rem; color:var(--color-text-muted);">AI Gateway on Port 20128 (<code>http://omniroute:20128/v1</code>)</div>
+            </div>
+          </div>
+          <div class="arch-item">
+            <span>🧠</span>
+            <div>
+              <code>Hindsight</code>
+              <div style="font-size:0.75rem; color:var(--color-text-muted);">Memory server on Ports 8888 (API) / 9999 (UI) (<code>http://hindsight:8888</code>)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="diagram-caption">Figure 1.1: Local Host Directories bind-mounted into Container. Add or edit files locally in <code>./data</code> and Hermes sees them instantly.</div>
+    </div>
+
+    <div class="callout">
+      <strong>Permissions Handshake (HERMES_UID / HERMES_GID):</strong> When starting with <code>make up</code>, your host user ID and group ID are passed automatically into the container. This ensures all files created by Hermes inside <code>/opt/data</code> remain readable and writable by your normal user on macOS/Linux.
+    </div>
+
+    <h3 style="margin-top:2rem;">Data Flow Across the Four Services</h3>
+    <p>Hermes does not talk to model providers directly in this stack. It talks to <strong>OmniRoute</strong> for inference and to <strong>Hindsight</strong> for long-term memory, and serves its own Web UI on port 9119. Hindsight in turn needs its own LLM to extract entities and synthesise reflections &mdash; and that is pointed back at OmniRoute as well.</p>
+
+    <div class="diagram-wrapper">
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Request paths inside the hermes-net bridge network</span></div>
+<pre>                      <span class="val">┌──────────────────────────────┐</span>
+   you ──► make chat ─<span class="val">┤  hermes  (hermes-agent)      │</span>
+                      <span class="val">│  + Web UI :9119 (s6)        │</span>
+                      <span class="val">└───┬──────────────────┬───────┘</span>
+         <span class="comment">inference</span>        │                  │   <span class="comment">long-term memory</span>
+         <span class="cmd">/v1/chat/completions</span>                │   <span class="cmd">/v1/default/banks/...</span>
+                          ▼                  ▼
+              <span class="val">┌───────────────────┐   ┌─────────────────────────┐</span>
+              <span class="val">│ omniroute :20128  │   │ hindsight :8888 (API)   │</span>
+              <span class="val">│ (AI gateway)      │◄──┤          :9999 (UI)     │</span>
+              <span class="val">└─────────┬─────────┘   │ embedded PostgreSQL +   │</span>
+                        │             <span class="val">│ pgvector, local embeds  │</span>
+                        ▼             <span class="val">└─────────────────────────┘</span>
+          <span class="comment">upstream LLM providers</span>
+          <span class="comment">(OpenAI, Anthropic, OpenRouter, ...)</span></pre>
+      </div>
+      <div class="diagram-caption">Figure 1.2: One credential, configured once in the OmniRoute dashboard, powers inference <em>and</em> Hindsight's entity extraction. Embeddings and reranking run locally inside the Hindsight container and never leave your machine.</div>
+    </div>
+
+    <div class="callout">
+      <strong>Service names, not localhost.</strong> Inside the Docker network the containers address each other by compose service name: <code>http://omniroute:20128/v1</code> and <code>http://hindsight:8888</code>. <code>localhost</code> inside a container means <em>that</em> container. This is the single most common mistake when hand-editing <code>config.yaml</code> or <code>./data/hindsight/config.json</code>.
+    </div>
+
+    <div class="callout warning">
+      <strong>Two volumes are deliberately NOT bind mounts.</strong> <code>hermes-installs</code> (at <code>/opt/data/installs</code>) and <code>hindsight-pgdata</code> (at <code>/home/hindsight/.pg0</code>) are Docker named volumes. The macOS bind mount is <strong>case-insensitive</strong>, and the Python toolchain Hermes copies into <code>installs/</code> contains both <code>share/terminfo/a</code> and <code>share/terminfo/A</code> &mdash; they collide and plugin installs fail. PostgreSQL on virtiofs is additionally slow and fsync-unsafe. Named volumes are ext4 inside the Docker VM, so both problems disappear. Override with <code>HINDSIGHT_DATA_VOLUME=./data-hindsight</code> if you want the database on the host anyway.
+    </div>
+  </section>
+
+  <!-- SECTION 1b: Services, Ports & Logins -->
+  <section id="services" class="section-card">
+    <div class="section-header">
+      <div class="section-icon">🔌</div>
+      <div>
+        <h2>Services, Ports &amp; Logins</h2>
+        <p>Everything the stack exposes, and how to reach it</p>
+      </div>
+    </div>
+
+    <p>A <code>make up</code> brings up <strong>three</strong> containers. <code>hermes</code> waits for <code>hindsight</code> to report <em>healthy</em> before it starts, so a first boot takes a minute or two while Hindsight initialises its PostgreSQL.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th>Container</th>
+          <th>Image</th>
+          <th>What it is for</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>hermes</strong></td>
+          <td><code>hermes-agent</code></td>
+          <td>built from <code>docker/Dockerfile</code></td>
+          <td>The agent. Runs <code>gateway run</code>, exposes an OpenAI-compatible API, <strong>and serves the Web UI on :9119</strong> &mdash; s6-overlay supervises the gateway and the dashboard side by side in this one container.</td>
+        </tr>
+        <tr>
+          <td><strong>omniroute</strong></td>
+          <td><code>hermes-agent-gtw</code></td>
+          <td><code>ghcr.io/diegosouzapw/omniroute:latest</code></td>
+          <td>AI gateway: one endpoint in front of many providers, with fallback, load balancing and token compression.</td>
+        </tr>
+        <tr>
+          <td><strong>hindsight</strong></td>
+          <td><code>hermes-agent-hindsight</code></td>
+          <td><code>ghcr.io/vectorize-io/hindsight:latest</code></td>
+          <td>Self-hosted long-term memory: knowledge graph, entity resolution, multi-strategy retrieval. Bundles PostgreSQL + pgvector.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Ports &amp; default credentials</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>URL</th>
+          <th>What</th>
+          <th>Default credentials</th>
+          <th>Shortcut</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>http://localhost:9119</code></td>
+          <td>Hermes Web UI dashboard (served by the <code>hermes</code> container)</td>
+          <td><code>admin</code> / <code>hermes-admin</code></td>
+          <td><code>make webui</code></td>
+        </tr>
+        <tr>
+          <td><code>http://localhost:20128</code></td>
+          <td>OmniRoute dashboard + <code>/v1</code> gateway</td>
+          <td>password <code>omniroute-admin</code></td>
+          <td><code>make gtw-dashboard</code></td>
+        </tr>
+        <tr>
+          <td><code>http://localhost:8888</code></td>
+          <td>Hindsight REST API</td>
+          <td>none by default</td>
+          <td><code>make hindsight-health</code></td>
+        </tr>
+        <tr>
+          <td><code>http://localhost:9999</code></td>
+          <td>Hindsight memory explorer UI</td>
+          <td>none by default</td>
+          <td><code>make hindsight-ui</code></td>
+        </tr>
+        <tr>
+          <td><code>http://localhost:8642</code></td>
+          <td>Hermes OpenAI-compatible API server</td>
+          <td><code>API_SERVER_KEY</code>; off unless <code>API_SERVER_ENABLED=true</code></td>
+          <td>&mdash;</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Change the passwords.</strong> <code>DASHBOARD_USERNAME</code>, <code>DASHBOARD_PASSWORD</code> and <code>OMNIROUTE_INITIAL_PASSWORD</code> all live in <code>.env</code>. The Hermes dashboard binds <code>0.0.0.0</code> inside the container, so basic auth is the only thing in front of it.
+    </div>
+
+    <h3>One Hermes container, two supervised processes</h3>
+    <p>The official Hermes image is <strong>s6-overlay supervised</strong>. <code>gateway run</code> is redirected to the supervised service, which <em>also</em> starts a dashboard whenever <code>HERMES_DASHBOARD</code> is truthy (<code>1</code>, <code>true</code>, <code>yes</code>). So the agent and the Web UI are two supervised processes in <strong>one</strong> container &mdash; both get auto-restart on crash.</p>
+
+    <div class="terminal">
+      <div class="terminal-header"><span class="terminal-title">Confirm both processes came up</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">docker compose logs hermes | grep -i dashboard</span>
+s6-rc: info: service dashboard: starting
+<span class="val">s6-rc: info: service dashboard successfully started</span>
+<span class="val">HERMES_DASHBOARD_READY port=9119</span></pre>
+    </div>
+
+    <div class="callout warning">
+      <strong>Why this is not two containers.</strong> An earlier version of this repo ran a second container off the same image and the same <code>./data</code> bind mount. That meant <strong>two writers against the same SQLite/WAL files</strong> (<code>state.db</code>, <code>kanban.db</code>) and two gateway supervisors over one <code>gateway.sock</code> &mdash; exactly the conditions that corrupt shared gateway state. One container with two supervised processes is both the supported design and the safe one. Set <code>HERMES_DASHBOARD=0</code> in <code>.env</code> for the agent without the Web UI.
+    </div>
+
+    <div class="callout">
+      <strong>The dashboard answers <code>302</code>, and that is correct.</strong> A non-loopback bind engages the auth gate, so <code>/</code> redirects to <code>/login?next=%2F</code>, which serves <code>200</code> with the <em>Sign in &mdash; Hermes Agent</em> page. <code>HERMES_DASHBOARD_INSECURE</code> is <strong>accepted but ignored</strong> since the June 2026 hardening; a public dashboard always requires an auth provider &mdash; basic auth (which this compose file sets) or OAuth &mdash; and <strong>fails closed</strong> if neither is present.
+    </div>
+
+    <h3>One command to check the whole stack</h3>
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dots"><span class="terminal-dot dot-red"></span><span class="terminal-dot dot-yellow"></span><span class="terminal-dot dot-green"></span></div>
+        <span class="terminal-title">Terminal</span>
+      </div>
+<pre><span class="prompt">$</span> <span class="cmd">make verify</span>
+<span class="comment">==============================================================</span>
+<span class="comment"> 1. Container status</span>
+<span class="comment">==============================================================</span>
+NAME                     IMAGE                                   SERVICE     STATUS
+hermes-agent             hermes-agent-local:latest               hermes      Up 2 minutes
+hermes-agent-gtw         ghcr.io/diegosouzapw/omniroute:latest   omniroute   <span class="val">Up 6 minutes (healthy)</span>
+hermes-agent-hindsight   ghcr.io/vectorize-io/hindsight:latest   hindsight   <span class="val">Up 32 seconds (healthy)</span>
+<span class="comment">... then: OmniRoute reachability, Hindsight reachability, inference routing,</span>
+<span class="comment">    plugin status, memory provider, memory banks, and hermes doctor.</span></pre>
+    </div>
+    <p><code>make verify</code> is the single most useful command in this repo. It proves each link with a real request issued <em>from inside the Hermes container</em>, which is the path the agent actually uses &mdash; not the host port mapping.</p>
+  </section>
+
+  <!-- SECTION 2: Makefile Command Reference -->
+  <section id="makefile" class="section-card">
+    <div class="section-header">
+      <div class="section-icon">⚙️</div>
+      <div>
+        <h2>Makefile Command Quick Reference</h2>
+        <p>Simple single-command workflows for all operations</p>
+      </div>
+    </div>
+
+    <div class="cmd-grid">
+      <div class="cmd-card">
+        <div class="cmd-card-name">make up</div>
+        <div class="cmd-card-desc">Creates local folders, initializes <code>.env</code>, builds and starts container in background.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make down</div>
+        <div class="cmd-card-desc">Stops container gracefully. All files in <code>./data</code> and <code>./workspace</code> are preserved.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make chat</div>
+        <div class="cmd-card-desc">Attaches an interactive CLI chat session (Classic REPL) inside the container.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make tui</div>
+        <div class="cmd-card-desc">Attaches the rich full-screen Ink TUI chat interface inside the container.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make console</div>
+        <div class="cmd-card-desc">Opens the safe Hermes administrative command console for commands without LLM costs.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make model</div>
+        <div class="cmd-card-desc">Launches the interactive arrow-key model and provider picker inside the container.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make webui</div>
+        <div class="cmd-card-desc">Opens the Hermes Agent Web UI dashboard (<code>http://localhost:9119</code>) in your browser.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make gtw-dashboard</div>
+        <div class="cmd-card-desc">Opens the OmniRoute AI Gateway Web Dashboard (<code>http://localhost:20128</code>) to manage models and keys.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make verify</div>
+        <div class="cmd-card-desc">Walks the whole stack and prints real evidence for every link: containers, OmniRoute, Hindsight, routing, plugin, memory provider, doctor.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make hindsight-install</div>
+        <div class="cmd-card-desc">Installs the pinned Hindsight memory plugin. Persists in <code>./data/plugins</code>, so run it once.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make hindsight-enable</div>
+        <div class="cmd-card-desc">Writes <code>config.json</code> from <code>.env</code>, sets <code>memory.provider=hindsight</code>, restarts the agent.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make hindsight-config</div>
+        <div class="cmd-card-desc">Regenerates <code>./data/hindsight/config.json</code> from <code>.env</code>, backing up the previous file.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make hindsight-status</div>
+        <div class="cmd-card-desc">Shows the Hermes memory provider status: built-in stores plus the active external provider.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make hindsight-health</div>
+        <div class="cmd-card-desc">Probes the Hindsight API <em>from inside</em> the Hermes container, proving the real network path.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make hindsight-llm-check</div>
+        <div class="cmd-card-desc">Makes a real call to prove the Hindsight &rarr; OmniRoute &rarr; upstream LLM leg works.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make hindsight-banks</div>
+        <div class="cmd-card-desc">Lists the memory banks stored in the Hindsight server.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make hindsight-ui</div>
+        <div class="cmd-card-desc">Opens the Hindsight memory explorer (<code>http://localhost:9999</code>) to browse the knowledge graph.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make hindsight-disable</div>
+        <div class="cmd-card-desc">Turns off the external memory provider; built-in <code>MEMORY.md</code>/<code>USER.md</code> stays active.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make demo-memory</div>
+        <div class="cmd-card-desc">Scripted retain &rarr; fresh session &rarr; recall walkthrough that proves long-term memory.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make provider-omniroute</div>
+        <div class="cmd-card-desc">Routes Hermes inference through the OmniRoute gateway (<code>model.provider=custom</code>).</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make provider-direct</div>
+        <div class="cmd-card-desc">Routes Hermes straight at OpenRouter, bypassing the gateway.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make provider-show</div>
+        <div class="cmd-card-desc">Prints the provider, base URL and default model Hermes is using right now.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make omniroute-models</div>
+        <div class="cmd-card-desc">Lists the models OmniRoute advertises, queried from inside the Hermes container, with 401 troubleshooting.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make gtw-logs</div>
+        <div class="cmd-card-desc">Tails the OmniRoute gateway logs.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make hindsight-logs</div>
+        <div class="cmd-card-desc">Tails the Hindsight memory server logs.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make shell</div>
+        <div class="cmd-card-desc">Opens an interactive bash shell terminal in the container for debugging.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make profile-create NAME=x</div>
+        <div class="cmd-card-desc">Creates a dedicated agent profile (or add <code>CLONE=1</code> to duplicate default config).</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make bot-setup</div>
+        <div class="cmd-card-desc">Runs interactive wizard for Telegram, Discord, Slack, WhatsApp, and Webhooks.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make sync-from-host</div>
+        <div class="cmd-card-desc">Copies existing host <code>~/.hermes/</code> memories, skills, and keys into <code>./data</code>.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make setup-keys</div>
+        <div class="cmd-card-desc">Interactive <code>hermes setup</code> inside container to configure API keys and providers.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make update-image</div>
+        <div class="cmd-card-desc">Pulls the latest rebuilt upstream Docker image and cleanly restarts container.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make doctor-fix</div>
+        <div class="cmd-card-desc">Runs <code>hermes doctor --fix</code> inside container to auto-resolve deprecations and state issues.</div>
+      </div>
+      <div class="cmd-card">
+        <div class="cmd-card-name">make destroy</div>
+        <div class="cmd-card-desc">Prompts for confirmation and completely wipes containers, images, and <code>./data</code>.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 3: Step-by-Step Demos -->
+  <section id="demo-lifecycle" class="section-card">
+    <div class="section-header">
+      <div class="section-icon">🚀</div>
+      <div>
+        <h2>Demo 1: Create, Chat, and Destroy in 60 Seconds</h2>
+        <p>Complete lifecycle testing from scratch</p>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="1">
+      <h4>Step 1: Start the container</h4>
+      <p>Run the <code>make up</code> command. It ensures directories are set up with correct permissions and launches Hermes:</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <div class="terminal-dots"><span class="terminal-dot dot-red"></span><span class="terminal-dot dot-yellow"></span><span class="terminal-dot dot-green"></span></div>
+          <span class="terminal-title">Terminal</span>
+        </div>
+        <pre><span class="prompt">$</span> <span class="cmd">make up</span>
+<span class="comment">[+] Running 1/1</span>
+<span class="val">✔ Container hermes-agent  Started</span></pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="2">
+      <h4>Step 2: Inspect running container & check health</h4>
+      <p>Confirm the container is healthy and see the internal Hermes version status:</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <div class="terminal-dots"><span class="terminal-dot dot-red"></span><span class="terminal-dot dot-yellow"></span><span class="terminal-dot dot-green"></span></div>
+          <span class="terminal-title">Terminal</span>
+        </div>
+        <pre><span class="prompt">$</span> <span class="cmd">make ps</span>
+NAME           IMAGE                      COMMAND                SERVICE   STATUS
+hermes-agent   hermes-agent-local:latest  "gateway run"          hermes    Up 15 seconds (healthy)
+
+<span class="prompt">$</span> <span class="cmd">make status</span>
+Hermes Agent v0.22.4 · stable
+✓ Data store: /opt/data
+✓ Gateway: ready</pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="3">
+      <h4>Step 3: Setup Provider & Model (Required Before 'make chat')</h4>
+      <p>Before running an interactive chat session, Hermes requires an active LLM provider (OpenAI, Anthropic, OpenRouter, Nous Portal, or local Ollama) configured in <code>/opt/data/.env</code> and <code>config.yaml</code>. Choose either method below:</p>
+
+      <!-- Sub-options visual tabs -->
+      <div style="background:var(--color-surface-sunken); border:1px solid var(--color-border); border-radius:8px; padding:1.2rem; margin:1rem 0;">
+        <h5 style="color:var(--color-primary-dark); font-size:1rem; margin-bottom:0.5rem;">Option A (Interactive Wizard):</h5>
+        <p style="font-size:0.88rem; margin-bottom:0.5rem;">Run the interactive setup tool inside the container to pick your provider and enter your API key:</p>
+        <div class="terminal" style="margin: 0.5rem 0;">
+          <div class="terminal-header"><span class="terminal-title">Interactive Setup Wizard</span></div>
+          <pre><span class="prompt">$</span> <span class="cmd">make setup-keys</span>
+<span class="val">? Choose a provider to configure:</span>
+  > 1) Nous Portal (Hermes models)
+    2) OpenAI (GPT-4o, Codex)
+    3) Anthropic (Claude 3.7 / 3.5 Sonnet)
+    4) OpenRouter
+    5) Local Ollama / Custom Endpoint
+<span class="comment">Enter your API key when prompted; it is saved directly to ./data/.env</span></pre>
+        </div>
+
+        <h5 style="color:var(--color-primary-dark); font-size:1rem; margin:1rem 0 0.5rem;">Option B (Direct Local Host Edit):</h5>
+        <p style="font-size:0.88rem; margin-bottom:0.5rem;">Since <code>./data</code> is mounted on your Mac, simply create or append your key directly to <code>./data/.env</code>:</p>
+        <div class="terminal" style="margin: 0.5rem 0;">
+          <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+          <pre><span class="prompt">$</span> <span class="cmd">echo "OPENAI_API_KEY=sk-..." >> ./data/.env</span>
+<span class="comment"># or for Anthropic:</span>
+<span class="prompt">$</span> <span class="cmd">echo "ANTHROPIC_API_KEY=sk-ant-..." >> ./data/.env</span></pre>
+        </div>
+
+        <h5 style="color:var(--color-primary-dark); font-size:1rem; margin:1rem 0 0.5rem;">Option C (Sync from your Host ~/.hermes):</h5>
+        <p style="font-size:0.88rem; margin-bottom:0.5rem;">If you already have Hermes configured on your computer, import your existing keys and settings in 1 second:</p>
+        <div class="terminal" style="margin: 0.5rem 0;">
+          <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+          <pre><span class="prompt">$</span> <span class="cmd">make sync-from-host</span>
+<span class="val">Copying /Users/.../.hermes to ./data...</span>
+<span class="val">Sync complete.</span></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="4">
+      <h4>Step 4: Interactive chat & Web UI Dashboard</h4>
+      <p>Now that your model provider is authenticated, you can chat via terminal or open the Web UI:</p>
+
+      <!-- Terminal Chat -->
+      <p style="font-weight:600; margin-top:0.75rem;">A) Terminal CLI Chat:</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <div class="terminal-dots"><span class="terminal-dot dot-red"></span><span class="terminal-dot dot-yellow"></span><span class="terminal-dot dot-green"></span></div>
+          <span class="terminal-title">Terminal</span>
+        </div>
+        <pre><span class="prompt">$</span> <span class="cmd">make chat</span>
+<span class="comment">Connecting to Hermes CLI inside container...</span>
+<span class="prompt">hermes></span> What environment are you running in?
+<span class="val">Hermes:</span> I am running inside a Linux Docker container with storage at /opt/data and workspace at /workspace.</pre>
+      </div>
+
+      <!-- WebUI Dashboard -->
+      <p style="font-weight:600; margin-top:1.25rem;">B) Graphical Web UI Dashboard:</p>
+      <p>The Web UI dashboard runs concurrently as a container service on port <code>9119</code>. Open it in your default browser with:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Terminal</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">make webui</span>
+<span class="val">Opening Hermes Web UI at http://localhost:9119...</span></pre>
+      </div>
+
+      <div class="callout">
+        <strong>Web UI Sign-In Credentials:</strong><br>
+        Because Docker containers bind on <code>0.0.0.0</code>, Hermes enforces a security auth gate to protect stored API keys and sessions. The built-in credentials configured in <code>.env</code> are:
+        <ul style="margin: 0.35rem 0 0.35rem 1.25rem;">
+          <li><strong>Username:</strong> <code>admin</code> (or your <code>DASHBOARD_USERNAME</code> in <code>.env</code>)</li>
+          <li><strong>Password:</strong> <code>hermes-admin</code> (or your <code>DASHBOARD_PASSWORD</code> in <code>.env</code>)</li>
+        </ul>
+        You can customize them anytime in <code>.env</code>.
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="5">
+      <h4>Step 5: Clean or Destroy</h4>
+      <p>Stop the container while keeping your local data, or destroy everything:</p>
+      <div class="terminal">
+        <div class="terminal-header">
+          <div class="terminal-dots"><span class="terminal-dot dot-red"></span><span class="terminal-dot dot-yellow"></span><span class="terminal-dot dot-green"></span></div>
+          <span class="terminal-title">Terminal</span>
+        </div>
+        <pre><span class="comment"># To stop container and preserve ./data:</span>
+<span class="prompt">$</span> <span class="cmd">make down</span>
+
+<span class="comment"># To completely wipe and reset the entire lab:</span>
+<span class="prompt">$</span> <span class="cmd">make destroy</span>
+WARNING: This will permanently delete ./data and container state.
+Are you sure? [y/N]: y
+<span class="val">Hermes container and data destroyed.</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 4: Volume & Local File Management -->
+  <section id="demo-volumes" class="section-card">
+    <div class="section-header">
+      <div class="section-icon">📂</div>
+      <div>
+        <h2>Demo 2: Managing Files Locally in <code>./data</code> and <code>./workspace</code></h2>
+        <p>Direct host-to-container synchronization and editing</p>
+      </div>
+    </div>
+
+    <p>Everything in <code>./data</code> corresponds to <code>/opt/data</code> inside the container. You do not need to enter the container to edit persona files, customize skills, or modify models.</p>
+
+    <!-- Visual File Explorer Representation -->
+    <div class="diagram-wrapper">
+      <div style="display:flex; justify-content:space-around; flex-wrap:wrap; gap:1.5rem;">
+        <div style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:8px; padding:1.2rem; min-width:260px;">
+          <h4 style="color:var(--color-secondary); margin-bottom:0.75rem;">📁 ./data (Mapped to /opt/data)</h4>
+          <ul style="list-style:none; font-family:'Fira Code', monospace; font-size:0.85rem; line-height:1.8;">
+            <li>📄 config.yaml <span style="color:var(--color-text-muted);">(model, approvals)</span></li>
+            <li>📄 .env <span style="color:var(--color-text-muted);">(API keys, bot tokens)</span></li>
+            <li>📄 SOUL.md <span style="color:var(--color-text-muted);">(persona prompt)</span></li>
+            <li>📁 memories/ <span style="color:var(--color-text-muted);">(persistent notes)</span></li>
+            <li>📁 skills/ <span style="color:var(--color-text-muted);">(custom agent skills)</span></li>
+            <li>📁 profiles/ <span style="color:var(--color-text-muted);">(multi-agent data)</span></li>
+          </ul>
+        </div>
+        <div style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:8px; padding:1.2rem; min-width:260px;">
+          <h4 style="color:var(--color-primary); margin-bottom:0.75rem;">📂 ./workspace (Mapped to /workspace)</h4>
+          <ul style="list-style:none; font-family:'Fira Code', monospace; font-size:0.85rem; line-height:1.8;">
+            <li>📁 my-project-repo/</li>
+            <li>📄 dataset.csv</li>
+            <li>📄 script.py</li>
+            <li>📄 documentation.md</li>
+          </ul>
+        </div>
+      </div>
+      <div class="diagram-caption">Figure 2.1: Local directory structure. Changes made on host macOS/Linux are immediately reflected in the container.</div>
+    </div>
+
+    <div class="demo-step" data-step="1">
+      <h4>Step 1: Customize persona directly on the host</h4>
+      <p>Edit or append to <code>./data/SOUL.md</code> from your Mac code editor (VS Code, Cursor, vim, etc.):</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">cat &lt;&lt; 'EOF' >> ./data/SOUL.md</span>
+You are an expert DevOps engineer assistant running in Docker.
+Always answer in a concise and structured manner.
+EOF</pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="2">
+      <h4>Step 2: Add project files to <code>./workspace</code></h4>
+      <p>Copy any local repo or document into <code>./workspace/</code>:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">mkdir -p ./workspace/test-repo</span>
+<span class="prompt">$</span> <span class="cmd">echo "print('Running from Docker workspace!')" > ./workspace/test-repo/main.py</span></pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="3">
+      <h4>Step 3: Verify Hermes can access and execute it</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Interactive Terminal</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">docker exec -it hermes-agent python3 /workspace/test-repo/main.py</span>
+<span class="val">Running from Docker workspace!</span></pre>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Already have local <code>~/.hermes</code> on your Mac?</strong><br>
+      Run <code>make sync-from-host</code> to populate <code>./data</code> with your local keys and skills. Run <code>make sync-to-host</code> to back up changes back to your Mac.
+    </div>
+  </section>
+
+  <!-- SECTION 5: Profiles Demo -->
+  <section id="demo-profiles" class="section-card">
+    <div class="section-header">
+      <div class="section-icon">🎭</div>
+      <div>
+        <h2>Demo 3: Creating and Switching Profiles</h2>
+        <p>Multiple isolated agents running under the same engine</p>
+      </div>
+    </div>
+
+    <p>A profile is an isolated Hermes identity with its own <code>SOUL.md</code>, memories, cron schedule, and skill catalog. Profiles live inside <code>/opt/data/profiles/&lt;name&gt;</code>.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Profile Name</th>
+          <th>Persona (SOUL.md)</th>
+          <th>Isolation Level</th>
+          <th>Local Folder</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>default</strong></td>
+          <td>General assistant</td>
+          <td>Main profile</td>
+          <td><code>./data/</code></td>
+        </tr>
+        <tr>
+          <td><strong>coder</strong></td>
+          <td>Python & Architecture Specialist</td>
+          <td>Isolated memory & config</td>
+          <td><code>./data/profiles/coder/</code></td>
+        </tr>
+        <tr>
+          <td><strong>ops</strong></td>
+          <td>Docker & CI/CD Operations Bot</td>
+          <td>Cloned tools + custom bot token</td>
+          <td><code>./data/profiles/ops/</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="demo-step" data-step="1">
+      <h4>Step 1: Create a cloned profile</h4>
+      <p>Clone the default profile to inherit existing API keys and core configuration:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Terminal</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">make profile-create NAME=ops CLONE=1</span>
+<span class="val">Cloning default profile into 'ops'...</span>
+<span class="val">Profile ops created successfully.</span></pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="2">
+      <h4>Step 2: List available profiles</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Terminal</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">make profile-list</span>
+Available profiles:
+  * default (active)
+    ops (/opt/data/profiles/ops)</pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="3">
+      <h4>Step 3: Switch active profile</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Terminal</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">make profile-use NAME=ops</span>
+<span class="val">Default profile switched to: ops</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 6: Bots & Messaging Gateway Demo -->
+  <section id="demo-bots" class="section-card">
+    <div class="section-header">
+      <div class="section-icon">🤖</div>
+      <div>
+        <h2>Demo 4: Setting Up Telegram / Discord Messaging Bots</h2>
+        <p>Connecting the container to chat platforms</p>
+      </div>
+    </div>
+
+    <p>Hermes includes a built-in messaging gateway supporting Telegram, Discord, Slack, WhatsApp, and more. One unified gateway serves your profiles simultaneously.</p>
+
+    <!-- Visual Bot Gateway Flow -->
+    <div class="diagram-wrapper">
+      <div style="display:flex; justify-content:center; align-items:center; gap:1.5rem; flex-wrap:wrap;">
+        <div style="background:#229ED9; color:var(--color-white); padding:0.75rem 1.25rem; border-radius:8px; font-weight:600;">📱 Telegram Bot</div>
+        <div style="background:#5865F2; color:var(--color-white); padding:0.75rem 1.25rem; border-radius:8px; font-weight:600;">💬 Discord Bot</div>
+        <div style="background:#4A154B; color:var(--color-white); padding:0.75rem 1.25rem; border-radius:8px; font-weight:600;">💼 Slack App</div>
+        <div style="font-size:1.5rem;">➔</div>
+        <div style="background:var(--color-primary); color:var(--color-on-primary); padding:1rem 1.5rem; border-radius:10px; font-weight:700; text-align:center;">
+          Hermes Gateway (in Container)<br>
+          <span style="font-size:0.8rem; font-weight:400; opacity:0.9;">Supervised by s6-overlay</span>
+        </div>
+      </div>
+      <div class="diagram-caption">Figure 4.1: Unified Messaging Gateway in Docker receiving webhooks / long-polling from chat networks.</div>
+    </div>
+
+    <div class="demo-step" data-step="1">
+      <h4>Step 1: Run the interactive bot wizard</h4>
+      <p>Launch the interactive gateway setup to enter your bot token and allowlist your user ID:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Terminal</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">make bot-setup</span>
+<span class="val">? Choose platform to configure:</span>
+  > 1) Telegram
+    2) Discord
+    3) Slack
+    4) WhatsApp
+<span class="comment">Enter Bot Token and your Telegram User ID when prompted.</span></pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="2">
+      <h4>Step 2: Start / Restart the gateway</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Terminal</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">make bot-start</span>
+<span class="val">Gateway service restarted.</span></pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="3">
+      <h4>Step 3: Monitor gateway logs live</h4>
+      <p>Follow live connection events, messages, and model tool calls:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Terminal</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">make bot-logs</span>
+<span class="val">[Gateway] Telegram polling started for bot @MyHermesBot</span>
+<span class="val">[Gateway] Inbound message from user @Adilson: "Check disk space"</span>
+<span class="val">[Agent] Tool called: terminal("df -h")</span>
+<span class="val">[Gateway] Sent response to Telegram.</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 6b: Demo 5 — OmniRoute -->
+  <section id="demo-omniroute" class="section-card">
+    <div class="section-header">
+      <div class="section-icon">🔀</div>
+      <div>
+        <h2>Demo 5: OmniRoute &mdash; One Endpoint, Many Providers</h2>
+        <p>Make the gateway serve a real model, then prove Hermes routes through it</p>
+      </div>
+    </div>
+
+    <div class="callout warning">
+      <strong>Do this demo first.</strong> Nothing in the stack can call a model until OmniRoute has an upstream provider <em>and</em> a client API key. On a fresh install <code>make verify</code> correctly reports <code>HTTP 401 Invalid API key</code> &mdash; the shipped <code>GTW_API_KEY=omniroute-local</code> is a <strong>placeholder</strong>, not a working key.
+    </div>
+
+    <div class="demo-step" data-step="1">
+      <h4>Step 1: Open the gateway dashboard</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make gtw-dashboard</span>
+<span class="val">Opening OmniRoute Dashboard at http://localhost:20128...</span></pre>
+      </div>
+      <p>Log in with <code>omniroute-admin</code>, or whatever you set as <code>OMNIROUTE_INITIAL_PASSWORD</code> in <code>.env</code>.</p>
+    </div>
+
+    <div class="demo-step" data-step="2">
+      <h4>Step 2: Connect an upstream provider</h4>
+      <p>Add a provider connection using your own account or API key &mdash; OpenAI, Anthropic, OpenRouter, Google and many more. <strong>This is the only place a real model credential needs to live.</strong></p>
+      <p>Worth narrating while you are in the UI:</p>
+      <table>
+        <thead>
+          <tr><th>Feature</th><th>What to show</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Fallback tiers</strong></td>
+            <td>Routing falls back across four tiers &mdash; subscription, API key, cheap, free &mdash; while any healthy target remains.</td>
+          </tr>
+          <tr>
+            <td><strong>Resilience layers</strong></td>
+            <td>Provider circuit breakers, per-connection cooldowns, and per-model lockouts.</td>
+          </tr>
+          <tr>
+            <td><strong>Routing strategies</strong></td>
+            <td>Around 20: round-robin, weighted, power-of-two-choices, least-used, headroom-based. Quota-Share splits one shared account's quota across pooled keys.</td>
+          </tr>
+          <tr>
+            <td><strong>Token compression</strong></td>
+            <td>RTK and Caveman compression, advertised at roughly 15&ndash;95% token savings.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="demo-step" data-step="3">
+      <h4>Step 3: Create a client key and hand it to the stack</h4>
+      <p>Go to <strong>Dashboard &rarr; Endpoints</strong>, create an API key, and copy it. Then edit <code>.env</code>:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">.env</span></div>
+<pre><span class="comment"># replace the placeholder with the key you just copied</span>
+<span class="cmd">GTW_API_KEY=</span><span class="val">&lt;your-omniroute-key&gt;</span></pre>
+      </div>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make restart</span></pre>
+      </div>
+      <div class="callout">
+        Both Hermes <strong>and</strong> Hindsight read <code>GTW_API_KEY</code>, so this single edit fixes inference <em>and</em> Hindsight's entity extraction at once.
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="4">
+      <h4>Step 4: Prove it from inside the Hermes container</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Before &mdash; placeholder key</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make omniroute-models</span>
+<span class="comment">--- GET http://omniroute:20128/v1/models as seen BY HERMES ---</span>
+HTTP 401
+{"error":{"message":"Invalid API key","type":"invalid_api_key","code":"invalid_api_key"}}
+
+401 = OmniRoute does not recognise GTW_API_KEY ('omniroute-local').
+OmniRoute requires a key that exists in ITS OWN database, even when
+OMNIROUTE_REQUIRE_API_KEY=false. The default value is a placeholder.</pre>
+      </div>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">After &mdash; real key + upstream provider</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make omniroute-models</span>
+<span class="comment">--- GET http://omniroute:20128/v1/models as seen BY HERMES ---</span>
+<span class="val">HTTP 200</span>
+{"object":"list","data":[{"id":"...","object":"model", ...}]}</pre>
+      </div>
+      <div class="callout warning">
+        <strong><code>OMNIROUTE_REQUIRE_API_KEY=false</code> does not disable client-key checking on <code>/v1</code>.</strong> OmniRoute accepts only keys that exist in its own <code>storage.sqlite</code> (under <code>./data-gtw/</code>). There is no way around creating one in the dashboard.
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="5">
+      <h4>Step 5: Route Hermes through the gateway</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make provider-omniroute</span>
+<span class="val">✓ Set model.provider = custom in /opt/data/config.yaml</span>
+<span class="val">✓ Set model.base_url = http://omniroute:20128/v1 in /opt/data/config.yaml</span>
+<span class="val">Container hermes-agent  Started</span>
+Hermes now routes inference via OmniRoute (bearer token = GTW_API_KEY).
+
+<span class="prompt">$</span> <span class="cmd">make provider-show</span>
+model.provider : <span class="val">custom</span>
+model.base_url : <span class="val">http://omniroute:20128/v1</span>
+model.default  : anthropic/claude-opus-4.6
+
+<span class="prompt">$</span> <span class="cmd">make model</span>   <span class="comment"># pick a model OmniRoute actually serves</span>
+<span class="prompt">$</span> <span class="cmd">make chat</span></pre>
+      </div>
+      <div class="callout warning">
+        <strong><code>model.default</code> must be a model your gateway can actually serve.</strong> A model name with no matching upstream fails at request time, not at config time &mdash; so the config looks perfectly healthy right up until the first message.
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="6">
+      <h4>Step 6: Flip between gateway and direct</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make provider-omniroute</span>  <span class="comment"># through the gateway</span>
+<span class="prompt">$</span> <span class="cmd">make provider-direct</span>     <span class="comment"># straight to OpenRouter, bypassing it</span>
+<span class="prompt">$</span> <span class="cmd">make provider-show</span>       <span class="comment"># which am I on right now?</span>
+<span class="prompt">$</span> <span class="cmd">make gtw-logs</span>            <span class="comment"># watch the gateway handle live requests</span></pre>
+      </div>
+      <p><code>provider-omniroute</code> sets Hermes' <code>model.provider</code> to <code>custom</code> &mdash; Hermes' name for &ldquo;any OpenAI-compatible endpoint&rdquo; &mdash; and <code>model.base_url</code> to the service URL. The bearer token Hermes sends is resolved in this order:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Key resolution order for provider &ldquo;custom&rdquo;</span></div>
+<pre><span class="val">model.api_key</span> (config.yaml)  →  <span class="val">CUSTOM_API_KEY</span>  →  <span class="val">OPENAI_API_KEY</span>  →  <span class="val">OPENROUTER_API_KEY</span></pre>
+      </div>
+      <p><code>docker-compose.yml</code> sets <code>CUSTOM_API_KEY=${GTW_API_KEY}</code>, which is why putting the key in <code>.env</code> is sufficient &mdash; no secret ever needs to be written into <code>config.yaml</code>.</p>
+    </div>
+  </section>
+
+  <!-- SECTION 6b2: Free combos -->
+  <section id="demo-free" class="section-card">
+    <div class="section-header">
+      <div class="section-icon">🆓</div>
+      <div>
+        <h2>Demo 5b: Free Combos &mdash; A Working Stack With Zero Credentials</h2>
+        <p>Real completions with no provider API key, and the hard limits that come with them</p>
+      </div>
+    </div>
+
+    <p>OmniRoute can serve real completions using built-in <strong>keyless</strong> (<code>noauth</code>) providers. That is what makes this course runnable for everyone. It also has limits you must know <em>before</em> building a demo on it. Everything below was measured on this stack, not assumed.</p>
+
+    <h3>What a &ldquo;combo&rdquo; actually is</h3>
+    <p><code>auto/*</code> model IDs are routing <em>chains</em>, not models.</p>
+    <table>
+      <thead><tr><th>Model ID</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>auto</code></td><td>Zero-config routing across all connected targets (LKGP strategy). Does not use saved combos.</td></tr>
+        <tr><td><code>auto/&lt;variant&gt;</code></td><td>A weight profile: <code>coding</code>, <code>fast</code>, <code>cheap</code>, <code>offline</code>, <code>smart</code>, <code>lkgp</code>, <code>chaos</code>.</td></tr>
+        <tr><td><code>auto/&lt;category&gt;:&lt;tier&gt;</code></td><td>Category (<code>coding</code>, <code>reasoning</code>, <code>vision</code>, <code>chat</code>, <code>multimodal</code>) + tier (<code>fast</code>, <code>cheap</code>, <code>reliable</code>, <code>free</code>, <code>pro</code>).</td></tr>
+        <tr><td><code>my-combo</code> / <code>combo/my-combo</code></td><td>A persisted combo you created (Settings &rarr; Combos, or <code>POST /api/combos</code>).</td></tr>
+      </tbody>
+    </table>
+    <p>This gateway advertises exactly two free routing IDs: <code>auto/best-free</code> and <code>auto/coding:free</code>.</p>
+
+    <div class="callout warning">
+      <strong>Tier filtering is FAIL-OPEN.</strong> If no connected model matches <code>:free</code>, OmniRoute falls back to the <strong>full</strong> pool. A <code>:free</code> model string is a <em>preference</em>, not a cost guarantee. Pair it with Settings &rarr; Routing &rarr; <em>Hide paid models</em> if you need a hard boundary.
+    </div>
+
+    <div class="demo-step" data-step="1">
+      <h4>Step 1: Build the browser-enabled gateway image (required)</h4>
+      <p>The biggest keyless provider, <code>cloudflare-playground</code>, drives a real browser. The published image ships the <code>playwright</code> npm package but <strong>not</strong> Chromium, so every free request fails:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Before</span></div>
+<pre>Cloudflare Playground needs Playwright and its Chromium browser.
+Install the browser runtime ... or use an OmniRoute
+browser-enabled deployment. <span class="comment">(HTTP 503)</span></pre>
+      </div>
+      <p>No browser-enabled tag is published upstream (all 100 tags checked), so we add it in a thin derived layer.</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make omniroute-browser-build</span>
+<span class="comment"># then in .env:</span>
+<span class="cmd">OMNIROUTE_IMAGE=omniroute-browser:local</span>
+<span class="prompt">$</span> <span class="cmd">docker compose up -d omniroute</span>
+<span class="prompt">$</span> <span class="cmd">docker exec hermes-agent-gtw ls /ms-playwright</span>
+<span class="val">chromium-1234  chromium_headless_shell-1234  ffmpeg-1011</span></pre>
+      </div>
+      <div class="callout">
+        One non-obvious detail inside that build: <code>npx playwright install</code> <strong>exits 127</strong> in this image &mdash; the bundled <code>playwright</code> package declares <code>bin &rarr; cli.js</code> but the file is absent and there is no <code>node_modules/.bin/playwright</code>. <code>docker/Dockerfile.omniroute</code> calls <code>node /app/node_modules/playwright-core/cli.js install --with-deps chromium</code> instead.
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="2">
+      <h4>Step 2: Mint a gateway client key (no browser needed)</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make omniroute-key</span>
+Logging in to http://localhost:20128 ...
+A key named 'hermes-course' exists but its secret is masked (allowKeyReveal=false); minting a new one.
+Creating API key 'hermes-course' ...
+<span class="val">Wrote GTW_API_KEY to .env (value not printed; backup kept).</span></pre>
+      </div>
+      <p>This logs into OmniRoute's own admin API with <code>OMNIROUTE_INITIAL_PASSWORD</code>, creates a key, <strong>verifies it against <code>/v1/models</code></strong>, and writes it to <code>.env</code>.</p>
+      <div class="callout warning">
+        <strong>The masked-key trap.</strong> <code>GET /api/keys</code> returns <strong>masked</strong> values when <code>allowKeyReveal</code> is false (the default) &mdash; a ~16-character prefix instead of the real ~35-character key. Anything read back from the listing will 401. That is why the script verifies before writing.
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="3">
+      <h4>Step 3: See what is reachable, then prove it</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">make free-combos</span></div>
+<pre>=== Keyless candidate pool (no credential required) ===
+  channel: auto/chat | candidates: <span class="val">21</span>
+  by provider: {'cloudflare-playground': 20, 'uncloseai': 1}
+  keyless(noauth): <span class="val">21</span> | reachable: <span class="val">21</span> | excluded: 0
+     cfp/zai-org/glm-5.2
+     cfp/moonshotai/kimi-k2.7-code
+     cfp/deepseek-ai/deepseek-v4-pro-0813
+     cfp/openai/gpt-oss-120b
+     ... and 13 more
+
+=== Free model IDs this gateway advertises ===
+  total models: 465
+  free routing IDs: <span class="val">auto/best-free, auto/coding:free</span></pre>
+      </div>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">make free-combo-test</span></div>
+<pre>=== Real completion through model=auto/best-free ===
+  served by: <span class="val">zai-org/glm-5.2</span>
+  content: <span class="val">'OK'</span>
+  usage: {'prompt_tokens': 67, 'completion_tokens': 27, 'total_tokens': 94}</pre>
+      </div>
+      <p><code>uncloseai</code> is keyless but its public beta is <strong>closed</strong> (<code>HTTP 401: The public beta is closed for now</code>). Nothing to fix &mdash; <code>cloudflare-playground</code> carries the pool.</p>
+    </div>
+
+    <div class="demo-step" data-step="4">
+      <h4>Step 4: Point Hermes <em>and</em> Hindsight at the free combo</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make provider-free</span>
+<span class="prompt">$</span> <span class="cmd">make provider-show</span>
+model.provider : <span class="val">custom</span>
+model.base_url : <span class="val">http://omniroute:20128/v1</span>
+model.default  : <span class="val">auto/best-free</span>
+
+<span class="prompt">$</span> <span class="cmd">make hindsight-llm-check</span>
+{"bank_id":"hermes-course","operations":[
+  {"operation":"retain",       "ok":<span class="val">true</span>,"status":<span class="val">"connected"</span>,"latency_ms":4672.8},
+  {"operation":"consolidation","ok":<span class="val">true</span>,"status":<span class="val">"connected"</span>,"latency_ms":4672.8},
+  {"operation":"reflect",      "ok":<span class="val">true</span>,"status":<span class="val">"connected"</span>,"latency_ms":4672.8}]}</pre>
+      </div>
+      <p>All three <code>connected</code> means Hindsight's extraction LLM now works through the free combo &mdash; no credential anywhere in the stack.</p>
+    </div>
+
+    <h3>What free combos CAN and CANNOT do</h3>
+    <p>The most important table in this guide. Every row was measured.</p>
+    <table>
+      <thead><tr><th>Capability</th><th>Free keyless combo</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>Plain chat completions</td><td><strong>✅ works</strong></td><td><code>make free-combo-test</code> returns real content + token usage.</td></tr>
+        <tr><td>Serving Hermes inference</td><td><strong>✅ works</strong></td><td>Real turns complete; transcript shows <code>· OmniRoute</code>.</td></tr>
+        <tr><td>Hindsight entity extraction (retain)</td><td><strong>✅ works</strong></td><td><code>make hindsight-roundtrip</code> passes; canary recalled at rank 1.</td></tr>
+        <tr><td>Hindsight <strong>consolidation</strong></td><td><strong>❌ does not work</strong></td><td>Needs structured output; the free provider <em>ignores</em> <code>response_format</code>. Off by default.</td></tr>
+        <tr><td>Hindsight retain &rarr; knowledge graph</td><td><strong>✅ works</strong></td><td>Bank populated; entities <code>port 20128</code>, <code>port 8888</code> extracted.</td></tr>
+        <tr><td>Auto-recall + context injection</td><td><strong>✅ works</strong></td><td>Hindsight logs <code>Complete: 16 facts (590 tok) | world=16 | 0.261s</code>.</td></tr>
+        <tr><td><strong>Structured tool calling</strong></td><td><strong>❌ does not work</strong></td><td>No <code>tool_calls</code> field is ever returned.</td></tr>
+        <tr><td><code>hindsight_recall</code>/<code>retain</code>/<code>reflect</code> tools</td><td><strong>❌ cannot execute</strong></td><td>Depend on tool calling; Hermes records <code>0 tool calls</code>.</td></tr>
+        <tr><td>Agent reliably <em>using</em> injected memory</td><td><strong>❌ unreliable</strong></td><td>Models ignored injected facts; one hit <code>finish_reason='length'</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="terminal">
+      <div class="terminal-header"><span class="terminal-title">make tool-call-check</span></div>
+<pre>=== Structured tool-calling probe: model=auto/best-free ===
+  served by: zai-org/glm-5.2
+  <span class="val">RESULT: NO structured tool_calls field.</span>
+  =&gt; Hermes will record 0 tool calls. Use HINDSIGHT_MEMORY_MODE=context
+     (injection only) on this model, and switch to a provider with real
+     function calling for any tool-using demo.</pre>
+    </div>
+
+    <div class="callout warning">
+      <strong><code>/v1/models</code> lies about this.</strong> OmniRoute advertises <code>"capabilities":{"tool_calling":true}</code> on <code>auto/*</code> entries. That is combo-level metadata, not a promise the keyless upstream honours. Trust <code>make tool-call-check</code>, not the catalog. Note also that <code>model.streaming: false</code> does <strong>not</strong> fix it &mdash; that escape hatch is for servers whose <em>streaming</em> tool-call path is broken, whereas these providers return no <code>tool_calls</code> field at all.
+    </div>
+
+    <div class="callout">
+      <strong>Why the shipped default is <code>HINDSIGHT_MEMORY_MODE=context</code>.</strong> In <code>hybrid</code> mode the tools would be advertised to the model and silently never execute. Injection-only is honest about what a free model can do. <strong>Switch to <code>hybrid</code> once you connect a provider with real function calling</strong>, then re-run <code>make hindsight-enable</code>.
+    </div>
+
+    <h3>Bottom line for the course</h3>
+    <p>Free combos are excellent for proving the plumbing end to end, smoke tests and plain chat &mdash; at zero cost and zero signup. For the <strong>memory recall demo</strong>, or anything tool-using, connect a real provider in the dashboard (<a href="#demo-omniroute">Demo 5</a>) and set <code>HINDSIGHT_MEMORY_MODE=hybrid</code>. One upstream key makes the whole stack behave.</p>
+  </section>
+
+  <!-- SECTION 6c: Demo 6 — Hindsight -->
+  <section id="demo-hindsight" class="section-card">
+    <div class="section-header">
+      <div class="section-icon">🧠</div>
+      <div>
+        <h2>Demo 6: Hindsight &mdash; Memory That Survives the Session</h2>
+        <p>Teach a fact, start a brand-new session, recall it, then inspect the knowledge graph</p>
+      </div>
+    </div>
+
+    <p>Hindsight is a long-term memory provider built on a knowledge graph with entity resolution and multi-strategy retrieval. It is maintained by Vectorize, and this stack runs the <strong>official self-hosted image</strong> so the whole demo stays on your machine.</p>
+
+    <div class="demo-step" data-step="1">
+      <h4>Step 1: Install the plugin (once)</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make hindsight-install</span>
+Installing hindsight plugin pinned @ d952b6e655fccab4581ee0722b51c5f103873d12...
+<span class="val">╭──────────────── ✓ Installed ────────────────╮</span>
+<span class="val">│ Plugin installed: .../vectorize-io/hindsight │</span>
+<span class="val">│ Location: /opt/data/plugins/hindsight        │</span>
+<span class="val">╰─────────────────────────────────────────────╯</span>
+  → Resolving Python dependencies…
+  <span class="val">✓ Resolving Python dependencies</span>
+  → Installing Python dependencies…
+  <span class="val">✓ Installing Python dependencies</span>
+<span class="val">✓ hindsight set as memory.provider.</span>
+
+│ hindsight │ <span class="val">enabled</span> │ 1.2.3 │ Hindsight — … │ catalog:community │</pre>
+      </div>
+      <p>The install is pinned to an immutable commit SHA and runs fully non-interactively (<code>--yes-deps --enable</code>).</p>
+      <div class="callout">
+        <strong>Why this is not baked into the Dockerfile.</strong> Plugins install into <code>$HERMES_HOME/plugins</code>, and <code>HERMES_HOME</code> is <code>/opt/data</code> &mdash; which compose bind-mounts over from <code>./data</code>. Anything the image writes under <code>/opt/data</code> is <strong>shadowed at runtime</strong> and invisible to the agent, so baking it in would produce an image that looks right and behaves as if the plugin were missing. Installing at runtime instead lands it in <code>./data/plugins/hindsight</code> on your Mac, where it survives <code>down</code>, <code>up</code>, <code>--force-recreate</code> and image rebuilds. Only <code>make destroy</code> removes it.
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="2">
+      <h4>Step 2: Generate the config from <code>.env</code></h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make hindsight-config</span>
+<span class="val">Backed up existing config to ./data/hindsight/config.json.bak-20261025153413</span>
+Wrote ./data/hindsight/config.json:
+{
+  "mode": <span class="val">"local_external"</span>,
+  "api_url": <span class="val">"http://hindsight:8888"</span>,
+  "bank_id": "hermes-course",
+  "timeout": 120,
+  "memory_mode": "hybrid",
+  "recall_budget": "mid",
+  "recall_types": "observation,world,experience",
+  "auto_retain": true
+}</pre>
+      </div>
+      <div class="callout warning">
+        <strong>Generate this file; never hand-edit it.</strong> The plugin resolves its configuration in the order <strong>profile file &rarr; <code>~/.hindsight/config.json</code> &rarr; <code>HINDSIGHT_*</code> env vars</strong> &mdash; so the profile file <em>wins</em>. A stale <code>config.json</code> silently overrides everything you set in <code>.env</code>, which is exactly how a demo ends up quietly talking to the wrong server. The target always backs up the previous file with a timestamp.
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="3">
+      <h4>Step 3: Activate it</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make hindsight-enable</span>   <span class="comment"># config + memory.provider + restart</span>
+<span class="prompt">$</span> <span class="cmd">make hindsight-status</span>
+
+Memory status
+────────────────────────────────────────
+  Built-in (MEMORY.md / USER.md):
+    Memory injection:   <span class="val">enabled ✓</span>
+    User profile:       <span class="val">enabled ✓</span>
+    Memory tool:        <span class="val">enabled ✓</span>
+  Provider:  <span class="val">hindsight</span>
+
+  Plugin:    <span class="val">installed ✓</span>
+  Status:    <span class="val">available ✓</span>
+
+  Installed plugins:
+    • byterover  (API key / local)
+    • retaindb  (API key / local)
+    • hindsight  (API key / local) <span class="val">← active</span></pre>
+      </div>
+      <p><code>make status</code> (<code>hermes doctor</code>) then reports <code class="val">✓ hindsight provider active</code>.</p>
+      <div class="callout warning">
+        <strong><code>hermes plugins enable</code> does NOT activate a memory provider.</strong> You also need <code>memory.provider: hindsight</code> in <code>config.yaml</code>. <code>make hindsight-enable</code> does both; if you install by hand, run <code>hermes config set memory.provider hindsight</code> too. Only one external provider can be active at a time &mdash; Hermes' built-in <code>MEMORY.md</code>/<code>USER.md</code> memory is always active regardless.
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="4">
+      <h4>Step 4: Prove the network link</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make hindsight-health</span>
+<span class="comment">--- hindsight /health/ready as seen BY HERMES ---</span>
+<span class="val">{"status":"healthy","database":"connected","db_acquire_ms":0.4,</span>
+<span class="val"> "db_pool_waiting":0,"db_pool_in_use":0,"db_pool_max":100,"db_pool_idle":5}</span>
+
+<span class="prompt">$</span> <span class="cmd">make hindsight-banks</span>
+<span class="comment">--- GET http://hindsight:8888/v1/default/banks as seen BY HERMES ---</span>
+{"banks":[],"total":0,"limit":100,"offset":0}
+<span class="comment">(A bank appears only after the agent's first retain.)</span>
+
+<span class="prompt">$</span> <span class="cmd">make hindsight-llm-check</span>   <span class="comment"># needs Demo 5 finished</span></pre>
+      </div>
+      <p>These probes run <em>inside</em> the Hermes container on purpose: they test the path the agent actually uses, not the host port mapping. An empty bank list on a fresh stack is correct, not a fault.</p>
+      <div class="callout">
+        <strong>Reading <code>hindsight-llm-check</code> honestly.</strong> Before OmniRoute has a working key you will see <code>"status":"auth_failed"</code> for <code>retain</code>, <code>consolidation</code> and <code>reflect</code>, each with a real latency of a few tens of milliseconds. That is actually good news in one narrow sense: a measured latency proves the network path works and only the credential is wrong. A broken network path looks completely different.
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="5">
+      <h4>Step 5: Retain, then recall in a FRESH session</h4>
+      <p>The scripted version:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make demo-memory</span></pre>
+      </div>
+      <p>Or by hand, which gives you control over the narrative:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Session A — teach it something it cannot possibly infer</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make chat</span>
+<span class="prompt">&gt;</span> Remember this for later: our staging database rotates credentials
+  every Tuesday at 03:00 UTC, and Priya owns the rotation runbook.
+<span class="prompt">&gt;</span> /exit</pre>
+      </div>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Session B — brand-new context, no history</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make chat</span>
+<span class="prompt">&gt;</span> Who owns the staging credential rotation runbook, and when does it run?
+<span class="val">&lt; Priya owns it; the rotation runs every Tuesday at 03:00 UTC.</span></pre>
+      </div>
+      <div class="callout warning">
+        <strong>On a free keyless combo this last step is unreliable.</strong> Retain, extraction and auto-recall all work &mdash; Hindsight logs <code>Complete: 16 facts (590 tok) | world=16 | 0.261s</code> &mdash; but the free models tested ignored the injected facts and replied &ldquo;I don't have that information&rdquo;, and one hit <code>finish_reason='length'</code> mid-reasoning. For a demo that lands every time, connect a real provider (<a href="#demo-omniroute">Demo 5</a>) and set <code>HINDSIGHT_MEMORY_MODE=hybrid</code>. See <a href="#demo-free">Demo 5b</a> for the measured capability matrix.
+        <br><br>
+        To test the <em>memory</em> rather than the model, query Hindsight directly &mdash; this is the honest proof that retain worked:
+      </div>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Proof that retain worked, independent of the model</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">docker exec hermes-agent curl -s -X POST \
+    http://hindsight:8888/v1/default/banks/hermes-course/memories/recall \
+    -H 'Content-Type: application/json' \
+    -d '{"query":"Which ports do OmniRoute and Hindsight use?","budget":"mid"}'</span>
+hits: 6
+  - <span class="val">The hermes-course demo stack uses Hindsight on port 8888.</span>
+  - <span class="val">The hermes-course demo stack uses OmniRoute on port 20128.</span></pre>
+      </div>
+      <p>Three mechanisms are in play:</p>
+      <table>
+        <thead>
+          <tr><th>Mechanism</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>auto_retain</code></td><td>Captures each turn automatically, asynchronously by default.</td></tr>
+          <tr><td><code>memory_mode: hybrid</code></td><td>Both injects recalled context into the prompt <em>and</em> exposes the tools. (<code>context</code> = injection only; <code>tools</code> = tools only.)</td></tr>
+          <tr><td><code>hindsight_retain</code></td><td>Stores information with automatic entity extraction; accepts per-call tags.</td></tr>
+          <tr><td><code>hindsight_recall</code></td><td>Multi-strategy search combining semantic search with the entity graph.</td></tr>
+          <tr><td><code>hindsight_reflect</code></td><td>LLM-powered synthesis across many memories (primary bank only).</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        Say <em>&ldquo;use your memory tool to retain this&rdquo;</em> in session A if you want a visible, explicit tool call for the audience rather than relying on silent automatic capture.
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="6">
+      <h4>Step 6: Inspect the knowledge graph</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make hindsight-ui</span>      <span class="comment"># http://localhost:9999</span>
+
+<span class="comment"># or straight at the REST API, from inside the agent container:</span>
+<span class="prompt">$</span> <span class="cmd">docker exec hermes-agent curl -s \
+    http://hindsight:8888/v1/default/banks/hermes-course/entities</span>
+<span class="prompt">$</span> <span class="cmd">docker exec hermes-agent curl -s \
+    http://hindsight:8888/v1/default/banks/hermes-course/graph</span></pre>
+      </div>
+      <p>Browse entities, relationships and documents in the UI. Note that <code>recall_types</code> defaults to <code>observation</code> only, which hides raw facts; <code>make hindsight-config</code> deliberately sets it to <code>observation,world,experience</code> so the demo shows everything the graph holds.</p>
+    </div>
+
+    <div class="demo-step" data-step="7">
+      <h4>Step 7: Turn it off</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make hindsight-disable</span>
+<span class="comment">External memory provider disabled; built-in memory still active.</span></pre>
+      </div>
+    </div>
+
+    <h3>What a &ldquo;bank&rdquo; is</h3>
+    <p>A <strong>bank</strong> is a Hindsight memory store. This stack pins a single static <code>bank_id</code> (<code>hermes-course</code>) because one shared bank makes the retain-then-recall demo easiest to follow. Alternatively <code>bank_id_template</code> derives the name from placeholders &mdash; <code>{profile}</code>, <code>{workspace}</code>, <code>{project}</code>, <code>{platform}</code>, <code>{user}</code>, <code>{session}</code> &mdash; so each Hermes profile can get its own isolated memory. Set <code>"bank_id_template": "hermes-{profile}"</code> in <code>./data/hindsight/config.json</code> to demo per-profile isolation alongside <strong>Demo 3</strong>.</p>
+  </section>
+
+  <!-- SECTION 6d: Memory modes & privacy -->
+  <section id="privacy" class="section-card">
+    <div class="section-header">
+      <div class="section-icon">🔐</div>
+      <div>
+        <h2>Memory Modes &amp; the Privacy Trade-off</h2>
+        <p>Three ways to run Hindsight, and what each one sends where</p>
+      </div>
+    </div>
+
+    <p>Set <code>HINDSIGHT_MODE</code> in <code>.env</code>, then re-run <code>make hindsight-enable</code>.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Mode</th>
+          <th>Where memory lives</th>
+          <th>Needs</th>
+          <th>Use when</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>local_external</code> <strong>(this stack's default)</strong></td>
+          <td>The <code>hindsight</code> container, on your machine</td>
+          <td>The compose service</td>
+          <td>You want a fully local demo you can open and inspect.</td>
+        </tr>
+        <tr>
+          <td><code>cloud</code></td>
+          <td>Vectorize's hosted service</td>
+          <td><code>HINDSIGHT_API_KEY</code> + <code>HINDSIGHT_API_URL=https://api.hindsight.vectorize.io</code></td>
+          <td>You want zero ops and do not mind the data leaving.</td>
+        </tr>
+        <tr>
+          <td><code>local_embedded</code></td>
+          <td>A daemon Hermes starts itself, inside the Hermes container</td>
+          <td>Nothing &mdash; fetched with <code>uvx</code>, version-pinned, on first use</td>
+          <td>You want no separate service and accept a cold start plus an idle timeout.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout warning">
+      <strong>Read this out loud during the demo.</strong> The plugin's own disclosure, verbatim from <code>hermes plugins info hindsight</code>:
+      <br><br>
+      &ldquo;<em>Disclosure &mdash; in cloud mode (and local external) every turn's conversation, and every entry the agent adds or replaces in Hermes's built-in MEMORY/USER stores, is sent to <code>api.hindsight.vectorize.io</code> <strong>or the URL you configure</strong>, into every bank it writes to; local embedded mode starts a background Hindsight daemon (fetched with <code>uvx</code>, version-pinned, on first run when <code>hindsight-api</code> is not installed) and keeps its LLM settings in <code>~/.hindsight/profiles/&lt;profile&gt;.env</code>; setup writes the keys you enter to the profile <code>.env</code>; repositories under folders you list in <code>trusted_project_dirs</code> may choose their bank with <code>.hindsight/config.toml</code>.</em>&rdquo;
+    </div>
+
+    <p>So <code>local_external</code> is <strong>not automatically private</strong>. It is private <em>because</em> the URL you configured happens to be a container on your own machine. Point <code>HINDSIGHT_API_URL</code> at a remote host and every single turn goes there instead. Always check which one you are on before demoing with real data:</p>
+
+    <div class="terminal">
+      <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">cat ./data/hindsight/config.json</span></pre>
+    </div>
+
+    <div class="callout">
+      <strong>One honest caveat even in the fully local setup.</strong> Hindsight's <strong>entity extraction and reflection</strong> call whatever <code>HINDSIGHT_API_LLM_BASE_URL</code> points at. In this stack that is OmniRoute, which then calls a real upstream provider &mdash; so the extraction prompts do leave your machine even though the <em>stored</em> memory does not. Embeddings and reranking are genuinely local. To keep the entire path on-device, set <code>HINDSIGHT_API_LLM_PROVIDER=ollama</code> (or <code>lmstudio</code>) with a local base URL.
+      <br><br>
+      Also note that <code>hermes memory setup</code> fetches its bank-template catalog from <code>raw.githubusercontent.com</code>, so that wizard needs network access.
+    </div>
+  </section>
+
+  <!-- SECTION 7: Doctor Diagnostics, Warnings & Fixes -->
+  <section id="doctor-fixes" class="section-card">
+    <div class="section-header">
+      <div class="section-icon">🩺</div>
+      <div>
+        <h2>Hermes Doctor: Common Warnings & Step-by-Step Fixes</h2>
+        <p>Understanding and resolving diagnostics in Docker and local environments</p>
+      </div>
+    </div>
+
+    <p>Running <code>make status</code> (or <code>hermes doctor</code>) scans credentials, SQLite integrity, security advisories, tool dependencies, and npm workspaces. Below is the breakdown and fix strategy for each reported diagnostic.</p>
+
+    <!-- Visual Warning Flow Diagram -->
+    <div class="diagram-wrapper">
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem;">
+        <div style="background:var(--color-surface); border-left:4px solid var(--color-accent-blue); border-radius:6px; padding:1rem; box-shadow:var(--shadow-sm);">
+          <strong style="color:var(--color-accent-blue);">1. Missing API Keys</strong>
+          <p style="font-size:0.8rem; margin-top:0.4rem; color:var(--color-muted);">Tool providers need keys to enable search, vision, or web extract.</p>
+          <code style="font-size:0.75rem; background:var(--color-surface-sunken); padding:2px 6px; border-radius:4px;">make setup-keys</code>
+        </div>
+        <div style="background:var(--color-surface); border-left:4px solid var(--color-secondary); border-radius:6px; padding:1rem; box-shadow:var(--shadow-sm);">
+          <strong style="color:var(--color-secondary);">2. NPM Vulnerabilities</strong>
+          <p style="font-size:0.8rem; margin-top:0.4rem; color:var(--color-muted);">Baked in root, web, and ui-tui workspaces. Requires upstream lockfile bump.</p>
+          <code style="font-size:0.75rem; background:var(--color-surface-sunken); padding:2px 6px; border-radius:4px;">make update-image</code>
+        </div>
+        <div style="background:var(--color-surface); border-left:4px solid var(--color-secondary); border-radius:6px; padding:1rem; box-shadow:var(--shadow-sm);">
+          <strong style="color:var(--color-secondary);">3. Profile Token Collisions</strong>
+          <p style="font-size:0.8rem; margin-top:0.4rem; color:var(--color-muted);">Cloning duplicates Telegram tokens. Gateway stops duplicate adapters.</p>
+          <code style="font-size:0.75rem; background:var(--color-surface-sunken); padding:2px 6px; border-radius:4px;">make profile-create CLONE=1</code>
+        </div>
+      </div>
+      <div class="diagram-caption">Figure 5.1: The three major diagnostic categories reported by Hermes Doctor.</div>
+    </div>
+
+    <!-- Issue 1 -->
+    <div class="demo-step" data-step="1">
+      <h4>Issue 1: "Run 'hermes setup' to configure missing API keys for full tool access"</h4>
+      <p>Hermes tools (such as web search, vision, firecrawl web extract, or image gen) check for provider configurations or environment tokens. When running in Docker, you can configure them interactively or via <code>.env</code>.</p>
+      
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Interactive Key Configuration</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">make setup-keys</span>
+<span class="comment"># Launches the guided wizard inside container:</span>
+<span class="val">? Choose a provider to configure:</span>
+  > 1) Nous Portal / Hermes
+    2) OpenAI (Codex / GPT-4o)
+    3) Anthropic Claude
+    4) Perplexity (for web search)
+    5) Custom OpenAI-compatible endpoint</pre>
+      </div>
+      <p style="font-size:0.85rem; color:var(--color-muted);">Alternatively, directly edit <code>./data/.env</code> on your host machine to add <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, or <code>PERPLEXITY_API_KEY</code>.</p>
+    </div>
+
+    <!-- Issues 2, 3, 4 -->
+    <div class="demo-step" data-step="2">
+      <h4>Issues 2, 3 & 4: NPM Vulnerabilities in root, web, and ui-tui Workspaces</h4>
+      <div class="callout warning">
+        <strong>Doctor Message:</strong> <em>"Root npm package has 1 npm vulnerability; wait for an upstream lockfile fix, then update your installation (Docker: pull a rebuilt image; recreating the same image restores the same dependencies)"</em>
+      </div>
+      <p>Why this happens and why manual <code>npm audit fix</code> inside the container is not the solution:</p>
+      <ul style="margin: 0.5rem 0 1rem 1.5rem; color:var(--color-muted); font-size:0.9rem;">
+        <li>In Hermes Docker images, frontend assets (<code>ui-tui</code>, <code>web</code>, and root CLI) are assembled during Docker image build time from the upstream Nous Research git repository lockfile (<code>package-lock.json</code>).</li>
+        <li>The internal filesystem at <code>/opt/hermes</code> is mounted <strong>read-only</strong> or sealed to ensure runtime integrity. Any ad-hoc changes inside the container get overwritten on container reboot.</li>
+        <li><strong>Resolution Strategy:</strong> As stated by Nous Research, wait for the upstream lockfile bump in the official repository. Once merged, pull the freshly built image with a single command:</li>
+      </ul>
+
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Terminal</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">make update-image</span>
+<span class="comment">[+] Pulling nousresearch/hermes-agent:stable</span>
+<span class="val">✔ Container hermes-agent  Recreated</span>
+<span class="val">✔ Container hermes-agent  Started</span></pre>
+      </div>
+    </div>
+
+    <!-- Issue 5 -->
+    <div class="demo-step" data-step="3">
+      <h4>Issue 5: Duplicate Bot Credentials Across Profiles</h4>
+      <div class="callout warning">
+        <strong>Doctor Warning:</strong> <em>"Duplicate platform credential across profiles: Profiles 'asimov-approver' and 'marcio-pm' both hold the same telegram credential (TELEGRAM_BOT_TOKEN)... one platform token can serve only one gateway."</em>
+      </div>
+      <p>When running <code>hermes profile create &lt;name&gt; --clone</code>, Hermes copies <code>.env</code> verbatim into the new profile's directory. Because Telegram only allows one connection per bot token at a time, the second adapter is parked.</p>
+      
+      <p><strong>Automated Fix in our Makefile:</strong></p>
+      <p>Running <code>make profile-create NAME=mybot CLONE=1</code> now automatically runs <code>config unset TELEGRAM_BOT_TOKEN</code> and <code>config unset API_SERVER_ENABLED</code> on the new profile immediately after creation.</p>
+      
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Fixing Existing Profiles Manually</span></div>
+        <pre><span class="comment"># Unset duplicate token from profile 'marcio-pm'</span>
+<span class="prompt">$</span> <span class="cmd">docker exec -it hermes-agent hermes -p marcio-pm config unset TELEGRAM_BOT_TOKEN</span>
+
+<span class="comment"># Restart gateway multiplexer:</span>
+<span class="prompt">$</span> <span class="cmd">make bot-start</span></pre>
+      </div>
+    </div>
+    <!-- Issue 6: Gateway Socket Permissions (macOS bind mount) -->
+    <div class="demo-step" data-step="4">
+      <h4>Issue 6: Gateway Inaccessible: <code>unsafe_control_permissions (gateway.sock has mode 0755, expected 0600)</code></h4>
+      <div class="callout warning">
+        <strong>Error message:</strong> <em>"Error: Gateway inaccessible: unsafe_control_permissions (/opt/data/gateway.sock has mode 0755, expected 0600; chmod 600 /opt/data/gateway.sock)"</em>
+      </div>
+      <p><strong>Why this happens on macOS:</strong></p>
+      <ul style="margin: 0.5rem 0 1rem 1.5rem; color:var(--color-muted); font-size:0.9rem;">
+        <li>When Hermes starts the gateway process inside the container, it binds a Unix domain control socket at <code>/opt/data/gateway.sock</code>.</li>
+        <li>Because <code>/opt/data</code> is bind-mounted directly to your host directory <code>./data</code> through Docker Desktop's virtiofs / osxfs filesystem bridge, macOS file sharing defaults to <code>0755</code> (read/execute for group/others).</li>
+        <li>For security (to prevent local privilege escalation and rogue cross-user control), Hermes strictly enforces mode <code>0600</code> (read/write only by owner) on <code>gateway.sock</code>. When the CLI verifies the socket, it refuses to connect if group or other bits are set.</li>
+      </ul>
+
+      <p><strong>The Fix:</strong></p>
+      <p>The permission bits must be restricted to <code>0600</code> on the host filesystem. The updated Makefile now does this automatically before every <code>make chat</code>, <code>make setup-keys</code>, and <code>make status</code> invocation.</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Quick Fix Terminal Command</span></div>
+        <pre><span class="prompt">$</span> <span class="cmd">chmod 600 ./data/gateway.sock</span>
+<span class="comment"># Or run the built-in target:</span>
+<span class="prompt">$</span> <span class="cmd">make fix-permissions</span>
+<span class="prompt">$</span> <span class="cmd">make chat</span></pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="5">
+      <h4>Plugin install fails: <code>File exists: .../share/terminfo/A</code></h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Error Output</span></div>
+<pre>✗ Could not prepare hindsight's dependencies:
+[('/opt/hermes/tools/python-.../share/terminfo/q',
+  '/opt/data/installs/.../share/terminfo/q',
+  "[Errno 17] File exists: ...")]</pre>
+      </div>
+      <p><strong>Why:</strong> the macOS bind mount (virtiofs) is <strong>case-insensitive</strong>. The Python toolchain Hermes copies into <code>/opt/data/installs</code> contains both <code>terminfo/a</code> and <code>terminfo/A</code> (likewise <code>e/E</code>, <code>l/L</code>, <code>m/M</code>, <code>n/N</code>, <code>p/P</code>, <code>q/Q</code>, <code>x/X</code>). On a case-insensitive filesystem the second of each pair collides with the first.</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Confirm it yourself</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">docker exec hermes-agent sh -c 'cd /opt/data && mkdir -p ct && cd ct && mkdir a && mkdir A'</span>
+mkdir: cannot create directory 'A': File exists   <span class="comment">&lt;- case-insensitive</span></pre>
+      </div>
+      <p><strong>Fix:</strong> already handled &mdash; <code>docker-compose.yml</code> mounts the <code>hermes-installs</code> named volume at <code>/opt/data/installs</code>, which is case-sensitive ext4 inside the Docker VM. If you hit this you are on an older compose file: <code>make down &amp;&amp; make up</code>.</p>
+    </div>
+
+    <div class="demo-step" data-step="6">
+      <h4>Plugin install fails: <code>Permission denied: /opt/data/installs/&lt;id&gt;</code></h4>
+      <p><strong>Why:</strong> Docker seeds a new named volume from the image's mountpoint, <em>including its owner and mode</em>. If <code>/opt/data/installs</code> does not exist in the image, Docker creates it <code>root:root 0755</code> and the Hermes worker (uid 1000, <code>hermes</code>) cannot write there.</p>
+      <p><strong>Fix:</strong> <code>docker/Dockerfile</code> now creates <code>/opt/data/installs</code> owned by <code>1000:1000</code>, and both <code>make up</code> and <code>make fix-permissions</code> repair volumes created by an older image.</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Quick Fix</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make fix-permissions</span>
+<span class="prompt">$</span> <span class="cmd">make hindsight-install</span></pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="7">
+      <h4>Hindsight container restarts in a loop</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">make hindsight-logs</span></div>
+<pre>ValueError: LLM API key is required.
+Set HINDSIGHT_API_LLM_API_KEY environment variable.</pre>
+      </div>
+      <p><strong>Why:</strong> Hindsight <strong>refuses to boot</strong> with an empty LLM API key. It only checks that the value is non-empty at startup &mdash; not that it works &mdash; so any non-empty string gets you a running server.</p>
+      <p><strong>Fix:</strong> make sure <code>GTW_API_KEY</code> is set (the compose file falls back to it, then to <code>omniroute-local</code>), or set <code>HINDSIGHT_API_LLM_API_KEY</code> explicitly in <code>.env</code>. Then <code>docker compose up -d hindsight</code> and confirm with <code>make hindsight-logs</code>.</p>
+    </div>
+
+    <div class="demo-step" data-step="8">
+      <h4>OmniRoute returns <code>401 Invalid API key</code></h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">make omniroute-models</span></div>
+<pre>HTTP 401
+{"error":{"message":"Invalid API key","type":"invalid_api_key","code":"invalid_api_key"}}</pre>
+      </div>
+      <p><strong>Why:</strong> OmniRoute accepts only keys that exist in its own <code>storage.sqlite</code> (under <code>./data-gtw/</code>). <code>OMNIROUTE_REQUIRE_API_KEY=false</code> does <strong>not</strong> disable this check on <code>/v1</code>, and the shipped <code>GTW_API_KEY=omniroute-local</code> is a placeholder.</p>
+      <p><strong>Fix:</strong> <a href="#demo-omniroute">Demo 5, steps 1&ndash;4</a>. Create a provider connection and a client key in the dashboard, put the key in <code>.env</code> as <code>GTW_API_KEY</code>, then <code>make restart</code>.</p>
+      <p><strong>Knock-on effect:</strong> Hindsight's extraction LLM goes through OmniRoute too, so until this is fixed <code>make hindsight-llm-check</code> reports:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">make hindsight-llm-check</span></div>
+<pre>{"bank_id":"hermes-course","operations":[
+  {"operation":"retain",       "ok":false,"status":<span class="val">"auth_failed"</span>,"latency_ms":34.6},
+  {"operation":"consolidation","ok":false,"status":<span class="val">"auth_failed"</span>,"latency_ms":34.6},
+  {"operation":"reflect",      "ok":false,"status":<span class="val">"auth_failed"</span>,"latency_ms":34.6}]}</pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="9">
+      <h4>Memory provider still shows <code>(none — built-in only)</code></h4>
+      <p><strong>Why:</strong> <code>hermes plugins enable</code> does not activate a memory provider &mdash; activation requires <code>memory.provider: hindsight</code> in <code>config.yaml</code>.</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Quick Fix</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make hindsight-enable</span>   <span class="comment"># does both steps</span>
+<span class="comment"># or manually:</span>
+<span class="prompt">$</span> <span class="cmd">docker exec hermes-agent hermes config set memory.provider hindsight</span></pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="10">
+      <h4><code>cannot attach stdin to a TTY-enabled container</code></h4>
+      <p>Harmless, and only from an older Makefile: <code>make status</code> uses <code>docker exec -it</code>, which needs a real terminal. <code>make verify</code> now calls <code>hermes doctor</code> without <code>-it</code> so it works inside pipes and CI.</p>
+    </div>
+
+    <div class="demo-step" data-step="11">
+      <h4>Two Hermes containers running, or a stale <code>hermes-agent-dashboard</code></h4>
+      <p><strong>Why:</strong> you upgraded from an older compose file that ran the dashboard as its own container. It shares <code>./data</code> with the agent, so both processes write the same <code>state.db</code> / <code>kanban.db</code> WAL files and both supervise one <code>gateway.sock</code>.</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Quick Fix</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">docker compose up -d --remove-orphans</span>
+<span class="val">Container hermes-agent-dashboard  Removed</span>
+
+<span class="prompt">$</span> <span class="cmd">docker compose ps</span>          <span class="comment"># expect exactly 3</span>
+hermes-agent             ...   hermes      Up 25 seconds   <span class="val">0.0.0.0:8642-&gt;8642/tcp, 0.0.0.0:9119-&gt;9119/tcp</span>
+hermes-agent-gtw         ...   omniroute   <span class="val">Up 5 minutes (healthy)</span>
+hermes-agent-hindsight   ...   hindsight   <span class="val">Up 5 minutes (healthy)</span>
+
+<span class="prompt">$</span> <span class="cmd">docker ps -a --filter ancestor=hermes-agent-local:latest --format '{{.Names}}'</span>
+hermes-agent            <span class="comment"># exactly one</span></pre>
+      </div>
+      <p>Note that <code>hermes-agent</code> now publishes <strong>both</strong> <code>8642</code> and <code>9119</code>.</p>
+    </div>
+
+    <div class="demo-step" data-step="12">
+      <h4>Dashboard will not start at all</h4>
+      <p><strong>Why:</strong> the dashboard's auth gate engages automatically on a non-loopback bind and <em>requires</em> an auth provider, or <code>start_server</code> fails closed. <code>HERMES_DASHBOARD_INSECURE</code> no longer helps.</p>
+      <p><strong>Fix:</strong> make sure <code>DASHBOARD_USERNAME</code> and <code>DASHBOARD_PASSWORD</code> are set in <code>.env</code> (compose maps them to <code>HERMES_DASHBOARD_BASIC_AUTH_USERNAME</code> / <code>_PASSWORD</code>), or set <code>HERMES_DASHBOARD_OAUTH_CLIENT_ID</code> for OAuth. Then <code>make restart</code> and check <code>docker compose logs hermes | grep -i dashboard</code>.</p>
+    </div>
+    <div class="demo-step" data-step="13">
+      <h4>Free combos all fail: <code>needs Playwright and its Chromium browser</code> (503)</h4>
+      <p><strong>Why:</strong> the keyless <code>cloudflare-playground</code> provider drives a real browser; the published image has the <code>playwright</code> npm package but no Chromium binary.</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Quick Fix</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make omniroute-browser-build</span>
+<span class="comment"># then in .env:  OMNIROUTE_IMAGE=omniroute-browser:local</span>
+<span class="prompt">$</span> <span class="cmd">docker compose up -d omniroute</span>
+<span class="prompt">$</span> <span class="cmd">docker exec hermes-agent-gtw ls /ms-playwright</span>
+<span class="val">chromium-1234  chromium_headless_shell-1234  ffmpeg-1011</span></pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="14">
+      <h4><code>GTW_API_KEY</code> taken from the dashboard listing still 401s</h4>
+      <p><strong>Why:</strong> <code>GET /api/keys</code> returns <strong>masked</strong> values when <code>allowKeyReveal</code> is false (the default) &mdash; a ~16-character prefix, not the real ~35-character key.</p>
+      <p><strong>Fix:</strong> <code>make omniroute-key</code>. It verifies any key against <code>/v1/models</code> before writing it and mints a fresh one when the listed value is masked.</p>
+    </div>
+
+    <div class="demo-step" data-step="15">
+      <h4><code>0 tool calls</code> &mdash; the agent &ldquo;calls&rdquo; a tool but nothing happens</h4>
+      <p>Two independent causes, both real:</p>
+      <p><strong>1. <code>--oneshot</code> ends the turn after the first assistant message</strong>, so the tool call is emitted and never executed. Use <code>--max-turns N</code>. Note <code>--oneshot</code> is also <em>implied on non-TTY stdio</em>, which is why <code>docker exec</code> without <code>-t</code> behaves this way even without the flag.</p>
+      <p><strong>2. The model has no structured tool calling.</strong> On free keyless combos the call leaks into the message body as plain text:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">What a leaked tool call looks like</span></div>
+<pre>☤ Hermes
+tool_calls: [{"name": "hindsight_recall", "arguments": "{\"topic\": \"...\"}"}]
+<span class="comment">Messages: 2 (1 user, 0 tool calls)</span></pre>
+      </div>
+      <p>Confirm with <code>make tool-call-check</code>. <code>model.streaming: false</code> does <strong>not</strong> help here.</p>
+    </div>
+
+    <div class="demo-step" data-step="16">
+      <h4><code>unsafe_control_permissions</code> immediately after a restart</h4>
+      <p><strong>Why:</strong> the gateway recreates <code>gateway.sock</code> a few <strong>seconds after</strong> <code>docker compose restart</code> returns, so a single <code>chmod</code> right after a restart races and loses.</p>
+      <p><strong>Fix:</strong> every Makefile target that restarts Hermes now <em>polls</em> for the socket (<code>WAIT_SOCK</code>). By hand:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">docker compose restart hermes</span>
+<span class="prompt">$</span> <span class="cmd">for i in $(seq 1 40); do [ -e ./data/gateway.sock ] && chmod 600 ./data/gateway.sock && break; sleep 2; done</span></pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="17">
+      <h4>The agent's own hallucination gets stored as a memory</h4>
+      <p><strong>Why:</strong> <code>auto_retain</code> captures <strong>every</strong> turn, including wrong assistant answers. A real example from this stack &mdash; after the agent guessed ports 8001/8002, a later recall ranked its own guess <em>above</em> the truth:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Memory poisoning, observed</span></div>
+<pre>- OmniRoute uses port 8002 | When: 2026-10-25T19:06:10+00:00   <span class="comment">&lt;- hallucination, retained</span>
+- Hindsight uses port 8001 | When: 2026-10-25T19:06:10+00:00   <span class="comment">&lt;- hallucination, retained</span>
+- <span class="val">The hermes-course demo stack uses Hindsight on port 8888.</span>    <span class="comment">&lt;- truth</span>
+- <span class="val">The hermes-course demo stack uses OmniRoute on port 20128.</span>   <span class="comment">&lt;- truth</span></pre>
+      </div>
+      <p>This is worth demonstrating deliberately. Mitigations: <code>HINDSIGHT_AUTO_RETAIN=false</code> and retain explicitly; scope capture with <code>HINDSIGHT_RETAIN_OBSERVATION_SCOPES</code> / <code>HINDSIGHT_RETAIN_SOURCE</code>; prune in <code>make hindsight-ui</code>. Use a fresh <code>HINDSIGHT_BANK_ID</code> per demo run so one bad run does not contaminate the next.</p>
+    </div>
+
+    <div class="demo-step" data-step="18">
+      <h4><code>ValidationError ... _ConstrainedConsolidationBatchResponse</code></h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">make hindsight-logs</span></div>
+<pre>ValidationError: 1 validation error for _ConstrainedConsolidationBatchResponse
+  Input should be a valid dictionary or instance of
+  _ConstrainedConsolidationBatchResponse
+  [type=model_type, input_value=[{'fact_id': '96656ce0-f4...',
+   'category': 'monitoring'}], <span class="val">input_type=list</span>]</pre>
+      </div>
+      <p><strong>What it is.</strong> Consolidation asks the LLM for a strict JSON <strong>object</strong> <code>{"creates":[...],"updates":[...],"deletes":[...]}</code> (<code>consolidator.py:852</code>). The model returned a bare <strong>list</strong>, so Pydantic rejects the whole batch. The entries carry <code>fact_id</code>/<code>category</code>, which are <strong>not fields of any action model</strong> &mdash; those key on <code>observation_id</code> (<code>_UpdateAction</code>, <code>_DeleteAction</code>) or carry no id at all (<code>_CreateAction</code>). The model is <em>parroting the input facts back</em> instead of emitting actions.</p>
+
+      <div class="callout warning">
+        <strong>Root cause: MODEL-specific, not provider-wide.</strong> <code>auto/best-free</code> routes to <code>glm-5.2</code>, which parrots input. Other <strong>keyless</strong> models on the same gateway return a correct object.
+      </div>
+
+      <table>
+        <thead><tr><th>Keyless model</th><th>Returns a correct object?</th></tr></thead>
+        <tbody>
+          <tr><td><code>cfp/zai-org/glm-5.2</code> (what <code>auto/best-free</code> picks)</td><td><strong>❌ bare list / prose</strong></td></tr>
+          <tr><td><code>cfp/openai/gpt-oss-120b</code></td><td><strong>✅ yes</strong></td></tr>
+          <tr><td><code>cfp/deepseek-ai/deepseek-v4-flash-0731</code></td><td><strong>✅ yes</strong></td></tr>
+          <tr><td><code>cfp/zai-org/glm-4.7-flash</code></td><td><strong>✅ yes</strong></td></tr>
+          <tr><td><code>cfp/moonshotai/kimi-k2.6</code></td><td><strong>✅ yes</strong></td></tr>
+        </tbody>
+      </table>
+
+      <p><strong>The fix: pin consolidation to its own capable model.</strong> It has a full set of per-operation LLM settings, so it need not share the chat model:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">.env</span></div>
+<pre><span class="cmd">HINDSIGHT_API_ENABLE_AUTO_CONSOLIDATION</span>=true
+<span class="cmd">HINDSIGHT_API_CONSOLIDATION_LLM_PROVIDER</span>=openai
+<span class="cmd">HINDSIGHT_API_CONSOLIDATION_LLM_BASE_URL</span>=http://omniroute:20128/v1
+<span class="cmd">HINDSIGHT_API_CONSOLIDATION_LLM_API_KEY</span>=            <span class="comment"># blank = reuse GTW_API_KEY</span>
+<span class="cmd">HINDSIGHT_API_CONSOLIDATION_LLM_MODEL</span>=<span class="val">cfp/deepseek-ai/deepseek-v4-flash-0731</span>
+<span class="cmd">HINDSIGHT_API_CONSOLIDATION_LLM_REASONING_EFFORT</span>=low
+<span class="cmd">HINDSIGHT_API_CONSOLIDATION_LLM_BATCH_SIZE</span>=2</pre>
+      </div>
+      <p>Pin a <strong>specific</strong> model, not an <code>auto/*</code> combo &mdash; a combo can reselect <code>glm-5.2</code> on any request, so the error would come back intermittently. Verify with <code>make hindsight-consolidate</code>.</p>
+
+      <div class="callout warning">
+        <strong>Pinning a model is necessary but NOT sufficient.</strong> <code>cfp/deepseek-ai/deepseek-v4-flash-0731</code> passes a toy <code>json_object</code> probe, yet on Hindsight's <em>real</em> consolidation prompt it still parrots input &mdash; <strong>28 further ValidationErrors</strong>, <code>created=0 updated=0 failed=1</code> on every batch. The toy probe was not representative of a large prompt carrying the full creates/updates/deletes schema with enum-constrained <code>source_fact_ids</code>. The pin fixes <code>OutputTooLongError</code>, not the shape error.
+      </div>
+
+      <p><strong>The actual fix: tolerant parsing.</strong> A locally built image adds a narrow <code>model_validator(mode="before")</code> to <code>_ConsolidationBatchResponse</code> &mdash; the base class, so <code>_ConstrainedConsolidationBatchResponse</code> inherits it &mdash; which coerces a bare list.</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make hindsight-patched-build</span>
+<span class="comment"># then in .env:</span>
+<span class="cmd">HINDSIGHT_IMAGE</span>=hindsight-patched
+<span class="cmd">HINDSIGHT_VERSION</span>=local
+<span class="prompt">$</span> <span class="cmd">docker compose up -d hindsight &amp;&amp; make hindsight-consolidate</span></pre>
+      </div>
+      <table>
+        <thead><tr><th>Input row</th><th>Treated as</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>usable <code>text</code> + explicit <code>observation_id</code></td><td><strong>update</strong></td><td>the model named a target explicitly</td></tr>
+          <tr><td>usable <code>text</code>, no <code>observation_id</code></td><td><strong>create</strong></td><td>non-destructive; discarded downstream if it cites no batch fact</td></tr>
+          <tr><td>no usable <code>text</code> (e.g. <code>{"id":…,"created_at":…}</code>)</td><td><strong>dropped</strong></td><td>parroted input; no defensible action exists</td></tr>
+        </tbody>
+      </table>
+      <p>A bare <code>id</code> is <strong>never</strong> mapped onto <code>observation_id</code>. In parroted output <code>id</code> is a <em>fact</em> id, and treating it as an <em>observation</em> id would rewrite the wrong record.</p>
+
+      <div class="callout warning">
+        <strong>This patches vendor code and is pinned to one upstream version.</strong> <code>docker/hindsight-tolerant-batch.patch.py</code> asserts every anchor (the pydantic import line and the exact class body) and <strong>aborts the build</strong> if upstream changed shape, so an image bump can never silently yield an unpatched image. The Dockerfile then runs a five-case self-test inside the real venv (<code>patch self-test OK</code>), so a broken patch fails at build time rather than at the first consolidation round. On a Hindsight image bump, re-check that script and rebuild. To go back to stock: <code>HINDSIGHT_IMAGE=ghcr.io/vectorize-io/hindsight</code>, <code>HINDSIGHT_VERSION=latest</code>.
+      </div>
+
+      <div class="callout warning">
+        <strong>Trap 1: <code>HINDSIGHT_API_ENABLE_AUTO_CONSOLIDATION=false</code> does NOT stop consolidation.</strong> It only suppresses the <em>inline post-retain</em> trigger; a background worker poller keeps claiming queued consolidation tasks (<code>claimed 1 tasks (1 consolidation)</code>). Measured with the flag <code>false</code> in the running container: <strong>30 consolidation runs and 24 ValidationErrors</strong>. Disabling it is not a fix, and not even a reliable workaround.
+      </div>
+
+      <div class="callout warning">
+        <strong>Trap 2: a reasoning-heavy model swaps one error for another.</strong> <code>cfp/openai/gpt-oss-120b</code> emits the right <em>shape</em> but spends its whole output budget thinking and gets truncated: <code>non-retryable OutputTooLongError: LLM output exceeded token limits (scope=consolidation)</code>. Raising the cap does not help &mdash; <code>DEFAULT_CONSOLIDATION_MAX_COMPLETION_TOKENS</code> is <code>None</code>, so Hindsight is not the one capping it; the upstream playground is. Use a low-reasoning <em>flash</em> model and keep the batch small.
+      </div>
+
+      <p><strong>Why <code>HINDSIGHT_API_LLM_STRICT_SCHEMA_CONSOLIDATION=true</code> does not help:</strong> strict mode asks the provider for its strongest schema mode, and a provider that ignores <code>response_format</code> has none. <code>DEFAULT_LLM_STRICT_SCHEMA</code> is <code>False</code>, so the schema is only <em>requested</em>, never grammar-enforced.</p>
+      <p><strong>Why no retry rescues it:</strong> <code>ValidationError</code> is classified <code>FAIL_FAST</code> (<code>consolidator.py:3621</code>). Consolidation pins temperature 0.0 and rebuilds a byte-identical payload, so re-sending asks a greedy decoder the same question. The caller bisects instead &mdash; which helps an oversized batch, never a systematic shape error.</p>
+    </div>
+
+    <div class="demo-step" data-step="19">
+      <h4>Consolidation never runs and logs nothing &mdash; a stale worker lease</h4>
+      <p>The most confusing of the three, because <strong>nothing errors</strong>. Consolidation simply never happens.</p>
+      <p>The background worker claims queued tasks under a lease keyed to its worker id. Recreating or replacing the container &mdash; <code>docker compose up -d</code> after an <code>.env</code> change, <code>--force-recreate</code>, an image bump &mdash; kills that worker while the lease still points at it. A new worker <strong>will not steal</strong> the task:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">An orphaned task</span></div>
+<pre>global: pending=<span class="val">1</span> (queried=1/1 schemas: default) | others: <span class="val">9454be36ad5d:1</span> | my_active: <span class="val">none</span>
+[PENDING_BREAKDOWN] consolidation: total=1 payload_null=0 retry_blocked=0 assigned=0</pre>
+      </div>
+      <p><code>pending=1</code>, but <code>others:</code> names a worker that no longer exists while the live worker is idle. It sits like that indefinitely.</p>
+      <div class="callout warning">
+        <strong>The trap inside the trap:</strong> POSTing <code>/consolidate</code> again returns <code>{"operation_id":"b6b1eb1c-...","deduplicated":true}</code> &mdash; it folds into the <strong>same stuck task</strong>. Retrying looks like it worked and does nothing.
+      </div>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Recovery</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">make hindsight-unstick</span>      <span class="comment"># restart runs the startup reconcile</span>
+<span class="prompt">$</span> <span class="cmd">make hindsight-consolidate</span></pre>
+      </div>
+      <p>Verified: <code>pending=1 ... others: 9454be36ad5d:1</code> became <code>pending=0 ... others: none</code>.</p>
+      <table>
+        <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td><code>ValidationError ... input_type=list</code></td><td>consolidation model returns a bare list</td><td>pin a capable model</td></tr>
+          <tr><td><code>OutputTooLongError</code></td><td>reasoning-heavy model truncated</td><td>low-reasoning flash model + small batch</td></tr>
+          <tr><td><strong>Nothing at all; <code>pending&gt;0</code>, <code>others:</code> names a dead worker</strong></td><td><strong>stale lease after a container recreate</strong></td><td><strong><code>make hindsight-unstick</code></strong></td></tr>
+        </tbody>
+      </table>
+      <p>Because every <code>.env</code> change to the <code>hindsight</code> service recreates the container, this is easy to hit repeatedly while tuning consolidation. Check the queue after any recreate:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Host Terminal</span></div>
+<pre><span class="prompt">$</span> <span class="cmd">docker compose logs --since 2m hindsight | grep -oE 'global: pending=[0-9]+[^|]*\| others: [^|]*'</span></pre>
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="20">
+      <h4>The free keyless pool vanishes mid-session</h4>
+      <p><strong>The single most important operational caveat in this stack.</strong> The keyless pool is <strong>ephemeral</strong>. Observed in one session, eleven minutes apart:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">make gtw-logs</span></div>
+<pre>01:24:04  AUTH  Using cloudflare-playground account: ***...     -&gt; <span class="val">status=success</span>
+01:35:31  AUTH  <span class="val">No active credentials for provider: cloudflare-playground</span></pre>
+      </div>
+      <p>The anonymous account expired or hit its quota, and <code>cloudflare-playground</code> dropped out of the pool entirely:</p>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">make free-combos, before and after</span></div>
+<pre>before:  candidates: <span class="val">21</span> | by provider: {'cloudflare-playground': 20, 'uncloseai': 1}
+after:   candidates: <span class="val">1</span>  | by provider: {'openrouter': 1}</pre>
+      </div>
+      <p>Everything downstream fails at once &mdash; Hermes turns, Hindsight retain, and consolidation &mdash; all with <code>401 provider_not_configured</code>. <strong>Restarting OmniRoute does not recover it</strong> (verified: 12 polls over 3 minutes, still 1 candidate).</p>
+      <div class="callout warning">
+        OmniRoute's own docs warn about this: <em>&ldquo;keyless availability is not guaranteed&rdquo;</em> and <em>&ldquo;Providers can rate-limit, change models, or go offline.&rdquo;</em> Treat free keyless capacity as a demo convenience, never as a dependency. If the course must run to a schedule, connect <strong>one</strong> real provider in the dashboard &mdash; the pool then falls back to it instead of going to zero.
+      </div>
+    </div>
+
+    <div class="demo-step" data-step="21">
+      <h4><code>make hindsight-llm-check</code> reports <code>timeout</code> on every operation</h4>
+      <div class="terminal">
+        <div class="terminal-header"><span class="terminal-title">Output</span></div>
+<pre>  retain         ok=False <span class="val">timeout</span> (10004 ms)
+  consolidation  ok=False <span class="val">timeout</span> (10004 ms)
+  reflect        ok=False <span class="val">timeout</span> (10004 ms)</pre>
+      </div>
+      <p>Not an auth failure and not a broken stack. The probe has a ~10&nbsp;s budget, while the free keyless provider is browser-driven and routinely takes 30&ndash;150&nbsp;s per call. The same stack returned <code>connected</code> at 4672&nbsp;ms minutes earlier &mdash; latency simply fluctuates.</p>
+      <p>Use the model-independent round trip instead, which is the real proof: <code>make hindsight-roundtrip</code>.</p>
+    </div>
+
+  </section>
+
+</div>
+
+<footer>
+  <p>Hermes Agent Docker Environment &bull; Course Material &bull; Nous Research Hermes v0.22</p>
+</footer>
+
+<script>
+// Simple copy helper for code snippets
+document.querySelectorAll('.terminal-copy').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const text = btn.closest('.terminal').querySelector('pre').innerText;
+    navigator.clipboard.writeText(text);
+    const original = btn.innerText;
+    btn.innerText = 'Copied!';
+    setTimeout(() => { btn.innerText = original; }, 2000);
+  });
+});
+</script>
+</body>
+</html>

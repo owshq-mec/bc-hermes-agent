@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "1d5abfcc-2241-491c-875e-f85d7553c949",
+  "status": "current",
+  "command": "deliver",
+  "type": "sequence",
+  "input": "/Users/adilsoncesar/Projects/02 - Others/hermes-course/.archify/sequence-auth-data-flow-20261025-163140/candidate.json",
+  "output": "/Users/adilsoncesar/Projects/02 - Others/hermes-course/docs/diagrams/hermes-auth-data-flow.html",
+  "specification": {
+    "sha256": "6dc4edacbd1549e9dbda6b7f5ce43ea3cc250b3729aa1e7451fd75f474d7c0db",
+    "bytes": 5776
+  },
+  "artifact": {
+    "sha256": "428512079de7c66a2b12420bf67567330d6fd5d2521269a10e07c2c9c0b8d26a",
+    "bytes": 843271
+  }
+}

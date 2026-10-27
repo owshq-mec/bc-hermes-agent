@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "356b4996-5ad1-4541-b032-3e44f1b3af84",
+  "status": "current",
+  "command": "deliver",
+  "type": "explainer",
+  "input": "/Users/adilsoncesar/Projects/02 - Others/hermes-course/.archify/explainer-hermes-architecture-20261025-163140/candidate.archify.md",
+  "output": "/Users/adilsoncesar/Projects/02 - Others/hermes-course/docs/diagrams/hermes-architecture.html",
+  "specification": {
+    "sha256": "a9c0dfdd01551cc0b596616fc34e569e248758c7df180ec0905d1fc981cad045",
+    "bytes": 5998
+  },
+  "artifact": {
+    "sha256": "82551c1135759dde81c98bb5bee103fcd53ea3a985507158f4f13922e710dd82",
+    "bytes": 957602
+  },
+  "explainer": {
+    "preparedSha256": "b3a3b102e09ca375e36422ee03a8318fe79aadaa5702f579cd354f7ee854b776",
+    "dependencies": [
+      {
+        "kind": "diagram-spec",
+        "id": "arch",
+        "inline": true,
+        "sha256": "f166f8e201d9ca3b2b427e1fba430261d85c07913b5f69b2d06297ccc381c95d",
+        "bytes": 1418
+      },
+      {
+        "kind": "diagram-spec",
+        "id": "req",
+        "inline": true,
+        "sha256": "01ed4889247fd614429cc51a86dbc6631836fb4b26215bab1cbcc25b0d0a4f16",
+        "bytes": 1594
+      }
+    ]
+  }
+}

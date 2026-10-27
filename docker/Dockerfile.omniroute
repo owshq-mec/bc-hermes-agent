@@ -1,0 +1,41 @@
+# ==============================================================================
+# OmniRoute + Chromium — needed for the FREE keyless providers
+#
+# The published image ghcr.io/diegosouzapw/omniroute:latest already ships the
+# `playwright` npm package but NOT the Chromium binary. Its biggest keyless
+# ("noauth") provider, cloudflare-playground, drives a real browser, so without
+# Chromium every free-tier request fails with:
+#
+#   Cloudflare Playground needs Playwright and its Chromium browser.
+#   Install the browser runtime ... or use an OmniRoute browser-enabled
+#   deployment. (HTTP 503)
+#
+# No browser-enabled tag is published upstream (checked: 100 tags, none match
+# browser/playwright/chromium), so we add the runtime in a thin derived layer.
+#
+# Build with:  make omniroute-browser-build
+# Then set in .env:  OMNIROUTE_IMAGE=omniroute-browser:local
+# ==============================================================================
+ARG OMNIROUTE_BASE_IMAGE=ghcr.io/diegosouzapw/omniroute:latest
+FROM ${OMNIROUTE_BASE_IMAGE}
+
+USER root
+
+# Install to a shared absolute path, not $HOME/.cache: the build runs as root
+# but the server runs as uid 1000 (node), and a browser under /root/.cache
+# would be unreadable at runtime.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Invoke playwright-core's CLI directly. `npx playwright` does NOT work in this
+# image: the bundled `playwright` package (1.62.1) declares bin -> cli.js but
+# that file is absent from the pruned install, and there is no
+# node_modules/.bin/playwright, so npx exits 127 "playwright: not found".
+# playwright-core/cli.js is present and supports --with-deps.
+#
+# --with-deps pulls the Debian system libraries Chromium needs (fonts, nss,
+# libdrm, ...). Kept in one layer so the apt lists are discarded with it.
+RUN node /app/node_modules/playwright-core/cli.js install --with-deps --no-progress chromium && \
+    chmod -R a+rX /ms-playwright && \
+    rm -rf /var/lib/apt/lists/*
+
+USER node

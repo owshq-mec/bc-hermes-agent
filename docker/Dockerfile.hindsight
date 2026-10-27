@@ -1,0 +1,51 @@
+# ==============================================================================
+# Hindsight + tolerant consolidation parsing
+#
+# The published image fails every consolidation batch when the LLM returns a
+# bare JSON list instead of {"creates":[...],"updates":[...],"deletes":[...]}:
+#
+#   ValidationError: 1 validation error for _ConstrainedConsolidationBatchResponse
+#     Input should be a valid dictionary ... input_type=list
+#
+# Pinning a different model is the first thing to try and is NOT enough on its
+# own: cfp/deepseek-ai/deepseek-v4-flash-0731 passes a toy json_object probe but
+# still parrots input on Hindsight's real consolidation prompt. So this image
+# adds a narrow `model_validator(mode="before")` that salvages genuine actions
+# and drops un-actionable rows.
+#
+# THIS PATCHES VENDOR CODE and is pinned to one upstream version. The patch
+# script asserts every anchor and ABORTS THE BUILD if the code shape changed,
+# so an image bump can never silently produce an unpatched image.
+#
+# Build with:  make hindsight-patched-build
+# Then set in .env:  HINDSIGHT_IMAGE=hindsight-patched  HINDSIGHT_VERSION=local
+# ==============================================================================
+ARG HINDSIGHT_BASE_IMAGE=ghcr.io/vectorize-io/hindsight:latest
+FROM ${HINDSIGHT_BASE_IMAGE}
+
+USER root
+
+COPY hindsight-tolerant-batch.patch.py /tmp/hindsight-tolerant-batch.patch.py
+
+# The image ships neither curl nor wget but does have its own interpreter.
+RUN /app/api/.venv/bin/python3 /tmp/hindsight-tolerant-batch.patch.py && \
+    rm -f /tmp/hindsight-tolerant-batch.patch.py
+
+# Prove the patched module imports inside the real venv, so a broken patch
+# fails at BUILD time rather than at the first consolidation round.
+RUN cd /app/api && /app/api/.venv/bin/python3 -c "\
+import hindsight_api.engine.consolidation.consolidator as c;\
+m=c._ConsolidationBatchResponse;\
+r=m.model_validate([{'id':'f45683db','created_at':'2026-10-25T00:40:29+00:00'}]);\
+assert (r.creates, r.updates, r.deletes) == ([], [], []), 'parroted row must drop';\
+r2=m.model_validate([{'text':'hello','source_fact_ids':['a']}]);\
+assert len(r2.creates)==1 and not r2.updates, 'create salvage failed';\
+r3=m.model_validate([{'observation_id':'obs-1','text':'hi','source_fact_ids':['a']}]);\
+assert len(r3.updates)==1 and not r3.creates, 'update salvage failed';\
+r4=m.model_validate([{'id':'fact-1','text':'hi','source_fact_ids':['a']}]);\
+assert len(r4.creates)==1 and not r4.updates, 'bare id must NOT become an update';\
+r5=m.model_validate({'creates':[],'updates':[],'deletes':[]});\
+assert (r5.creates, r5.updates, r5.deletes) == ([], [], []), 'object path regressed';\
+print('patch self-test OK')"
+
+USER hindsight

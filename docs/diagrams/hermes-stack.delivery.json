@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "c12e0416-96e3-48e3-a655-7afd741edf47",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/Users/adilsoncesar/Projects/02 - Others/hermes-course/.archify/architecture-hermes-stack-20261025-163140/candidate.json",
+  "output": "/Users/adilsoncesar/Projects/02 - Others/hermes-course/docs/diagrams/hermes-stack.html",
+  "specification": {
+    "sha256": "8d38c0a5bc4ee562c4f1639c327d454e1ebcd436bdbf27162512f124329cb42b",
+    "bytes": 5956
+  },
+  "artifact": {
+    "sha256": "2d777b2fe7a5811c934384e976b1a5649d20d2ad8d81fdae77425c7f2356dfb0",
+    "bytes": 855380
+  }
+}

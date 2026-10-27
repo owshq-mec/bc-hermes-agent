@@ -1,0 +1,23 @@
+# Environment & local credentials
+.env
+*.env
+auth.json
+
+# Backups written by the helper scripts
+# (docker/omniroute-provision.sh and docker/write-hindsight-config.sh keep a
+# timestamped copy before rewriting .env / hindsight config.json)
+*.bak
+*.bak-*
+
+# Local mounts and directories for Hermes state
+data/
+workspace/
+data-gtw/
+data-hindsight/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Docker volumes / cache
+.docker/
