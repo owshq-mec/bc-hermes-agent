@@ -21,3 +21,6 @@ Thumbs.db
 
 # Docker volumes / cache
 .docker/
+data/
+data-gtw/
+workspace/
