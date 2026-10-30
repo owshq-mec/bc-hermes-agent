@@ -1,9 +1,10 @@
-.PHONY: help build up down restart logs ps shell chat tui console model webui gtw-dashboard status fix-permissions clean destroy setup-dirs profile-list profile-create profile-use bot-setup bot-start bot-logs sync-from-host sync-to-host doctor-fix setup-keys update-image \
+.PHONY: help build local-images up down restart logs ps shell chat tui console model webui gtw-dashboard status fix-permissions clean destroy setup-dirs profile-list profile-create profile-use bot-setup bot-start bot-logs desktop-status desktop-start desktop-stop sync-from-host sync-to-host doctor-fix setup-keys update-image \
 	omniroute-browser-build omniroute-key free-combos free-combo-test tool-call-check provider-free dashboard-logs hindsight-install hindsight-llm-check hindsight-config hindsight-enable hindsight-disable hindsight-status hindsight-health hindsight-logs hindsight-ui hindsight-banks hindsight-shell \
 	provider-omniroute provider-direct provider-show omniroute-models gtw-logs \
 	verify demo-memory \
 	langfuse-up langfuse-down langfuse-logs langfuse-ui langfuse-status langfuse-traces \
-	langfuse-otel-header langfuse-secrets langfuse-reset langfuse-verify
+	langfuse-otel-header langfuse-secrets langfuse-reset langfuse-verify \
+	webhook-up webhook-down webhook-logs webhook-test webhook-log
 
 # Load .env if it exists
 ifneq (,$(wildcard ./.env))
@@ -24,6 +25,11 @@ export HERMES_GID
 export DATA_DIR
 export WORKSPACE_DIR
 export CONTAINER_NAME
+
+# Locally DERIVED images. Each is built from a Dockerfile in docker/ by its own
+# target and exists nowhere but this machine -- no registry serves them.
+HINDSIGHT_PATCHED_IMAGE = $(or $(HINDSIGHT_PATCHED_TAG),hindsight-patched:local)
+OMNIROUTE_BROWSER_IMAGE = $(or $(OMNIROUTE_BROWSER_TAG),omniroute-browser:local)
 
 help: ## Show this help message
 	@echo "Available commands for Hermes Agent Docker setup:"
@@ -51,10 +57,31 @@ setup-dirs: ## Create local data and workspace directories with correct permissi
 	@echo "Directories ready: $(DATA_DIR) (Hermes /opt/data), $(WORKSPACE_DIR) (/workspace), $(or $(OMNIROUTE_DATA_DIR),./data-gtw) (OmniRoute gtw)"
 	@echo "Hindsight PostgreSQL storage: $(or $(HINDSIGHT_DATA_VOLUME),hindsight-pgdata) (named volume unless it starts with ./ or /)"
 
-build: setup-dirs ## Build the Hermes Docker image
+local-images: ## Build whichever locally derived images .env selects and the daemon is missing
+	@# Only `hermes` has a `build:` stanza in docker-compose.yml, so compose can
+	@# rebuild just that one on its own. `hindsight` and `omniroute` are declared
+	@# with `image:` alone: normally the upstream image is PULLED, and .env can
+	@# instead point them at a local derivative built from docker/Dockerfile.*.
+	@# Nothing can pull those tags, so a missing one aborts the whole `up` with
+	@#   Error response from daemon: pull access denied for omniroute-browser,
+	@#   repository does not exist or may require 'docker login'
+	@# (and the same for hindsight-patched, which .env.example selects by
+	@# default). Build them here, before compose ever goes looking.
+	@if [ "$(or $(HINDSIGHT_IMAGE),):$(or $(HINDSIGHT_VERSION),)" = "$(HINDSIGHT_PATCHED_IMAGE)" ] && \
+		! docker image inspect $(HINDSIGHT_PATCHED_IMAGE) >/dev/null 2>&1; then \
+		echo "==> .env selects $(HINDSIGHT_PATCHED_IMAGE) but it is not built; building it now"; \
+		$(MAKE) --no-print-directory hindsight-patched-build; \
+	fi
+	@if [ "$(or $(OMNIROUTE_IMAGE),)" = "$(OMNIROUTE_BROWSER_IMAGE)" ] && \
+		! docker image inspect $(OMNIROUTE_BROWSER_IMAGE) >/dev/null 2>&1; then \
+		echo "==> .env selects $(OMNIROUTE_BROWSER_IMAGE) but it is not built; building it now"; \
+		$(MAKE) --no-print-directory omniroute-browser-build; \
+	fi
+
+build: setup-dirs local-images ## Build the Hermes Docker image
 	docker compose build
 
-up: setup-dirs ## Start Hermes Agent container in background
+up: setup-dirs local-images ## Start Hermes Agent container in background
 	docker compose up -d
 	@# The hermes-installs named volume must be writable by uid 1000. New images
 	@# seed this correctly, but a volume created by an older image is root-owned.
@@ -66,8 +93,11 @@ down: ## Stop and remove the Hermes Agent container
 
 restart: down up ## Restart the Hermes container
 
-update-image: ## Pull the latest upstream rebuilt Docker image and restart container
-	docker compose pull
+update-image: setup-dirs local-images ## Pull the latest upstream rebuilt Docker image and restart container
+	@# --ignore-pull-failures: the locally derived tags (hindsight-patched:local,
+	@# omniroute-browser:local) have no registry, so pulling them always fails.
+	@# local-images above has already made sure they exist.
+	docker compose pull --ignore-pull-failures
 	docker compose up -d --force-recreate
 
 logs: ## Tail the Hermes agent logs (gateway + supervised dashboard)
@@ -171,6 +201,29 @@ bot-start: ## Start or restart gateway inside the container
 
 bot-logs: ## View messaging gateway logs
 	@docker exec -it $(CONTAINER_NAME) hermes logs gateway -f
+
+# ==============================================================================
+# Bot Desktop — the headless Xfce "Screen" the agent (and a human) can drive
+#
+# The X stack is baked into the image by docker/Dockerfile; `make build` is what
+# installs it. There is NO VNC port to publish: Xvnc listens on a 0600 unix
+# socket only (-rfbport -1) at $(DATA_DIR)/bot-desktop/rfb.sock, and the
+# dashboard on :$(DASHBOARD_PORT) bridges it to the browser over a WebSocket.
+# Open it from the Screen pane in `make webui`.
+#
+# These targets go through the `hermes` shim, which drops to uid 1000 before
+# exec'ing — important here: a screen started as root would leave an rfb.sock
+# the dashboard (uid 1000) cannot open.
+# ==============================================================================
+
+desktop-status: ## Show whether this profile's Bot Desktop is installed and running
+	@docker exec -it $(CONTAINER_NAME) hermes computer-use screen status
+
+desktop-start: ## Start this profile's Bot Desktop (then view it in the dashboard's Screen pane)
+	@docker exec -it $(CONTAINER_NAME) hermes computer-use screen start
+
+desktop-stop: ## Stop this profile's Bot Desktop and free its ~220 MiB
+	@docker exec -it $(CONTAINER_NAME) hermes computer-use screen stop
 
 # ==============================================================================
 # Local ~/.hermes <-> Container Data Synchronization
@@ -279,9 +332,9 @@ print("                  it does NOT mean retain is broken - verify with a real 
 	@echo ""
 
 hindsight-patched-build: ## Build Hindsight with tolerant consolidation parsing (fixes the bare-list ValidationError)
-	docker build -f docker/Dockerfile.hindsight -t $(or $(HINDSIGHT_PATCHED_TAG),hindsight-patched:local) docker/
+	docker build -f docker/Dockerfile.hindsight -t $(HINDSIGHT_PATCHED_IMAGE) docker/
 	@echo ""
-	@echo "Built $(or $(HINDSIGHT_PATCHED_TAG),hindsight-patched:local). Set in .env:"
+	@echo "Built $(HINDSIGHT_PATCHED_IMAGE). Set in .env:"
 	@echo "  HINDSIGHT_IMAGE=hindsight-patched"
 	@echo "  HINDSIGHT_VERSION=local"
 	@echo "Then: docker compose up -d hindsight && make hindsight-consolidate"
@@ -429,10 +482,10 @@ demo-memory: ## Retain a fact, then recall it in a FRESH session to prove long-t
 FREE_MODEL ?= auto/best-free
 
 omniroute-browser-build: ## Build the OmniRoute image with Chromium (required by the keyless free providers)
-	docker build -f docker/Dockerfile.omniroute -t $(or $(OMNIROUTE_BROWSER_TAG),omniroute-browser:local) .
+	docker build -f docker/Dockerfile.omniroute -t $(OMNIROUTE_BROWSER_IMAGE) .
 	@echo ""
-	@echo "Built $(or $(OMNIROUTE_BROWSER_TAG),omniroute-browser:local). Now set in .env:"
-	@echo "  OMNIROUTE_IMAGE=$(or $(OMNIROUTE_BROWSER_TAG),omniroute-browser:local)"
+	@echo "Built $(OMNIROUTE_BROWSER_IMAGE). Now set in .env:"
+	@echo "  OMNIROUTE_IMAGE=$(OMNIROUTE_BROWSER_IMAGE)"
 	@echo "Then: docker compose up -d omniroute"
 
 omniroute-key: ## Create an OmniRoute client API key and write it to .env as GTW_API_KEY
@@ -553,3 +606,34 @@ langfuse-verify: ## Prove the whole path: Hindsight -> OTLP -> Langfuse -> Click
 		|| echo "    Could not query ClickHouse"
 	@echo ""
 	@echo "If span count is 0, wait ~10s and re-run: spans are batched, then queued."
+
+# ==============================================================================
+# Webhook relay — prove Hindsight <-> Hermes reachability (opt-in)
+# ==============================================================================
+# One container behind the `webhook` compose profile, so `make up` never starts
+# it. POST /hook fans out to Hindsight (recall) and Hermes (chat completion) and
+# reports each leg separately. Needs API_SERVER_ENABLED=true and a non-empty
+# API_SERVER_KEY in .env for the Hermes leg.
+WEBHOOK_TEST_PORT ?= 8777
+
+webhook-up: ## Start the opt-in webhook relay (profile: webhook)
+	@docker compose --profile webhook up -d webhook-test
+	@echo "Webhook relay: http://localhost:$(WEBHOOK_TEST_PORT)  (make webhook-test)"
+
+webhook-down: ## Stop and remove ONLY the webhook relay container
+	@docker compose --profile webhook rm -fs webhook-test 2>/dev/null || true
+	@echo "Webhook relay stopped."
+
+webhook-logs: ## Tail the webhook relay log (every delivery + leg statuses)
+	@docker compose --profile webhook logs -f --tail=100 webhook-test
+
+webhook-test: ## Fire a sample delivery at POST /hook and print the round-trip report
+	@curl -sS -m 120 -X POST "http://localhost:$(WEBHOOK_TEST_PORT)/hook" \
+		-H 'Content-Type: application/json' \
+		-d '{"event":"webhook.test","source":"make webhook-test"}' \
+		| python3 -I -c 'import json,sys; d=json.load(sys.stdin); \
+	[print("  %-9s status=%s ok=%s %sms %s" % (k, d[k]["status"], d[k]["ok"], d[k]["ms"], d[k].get("error") or d[k]["body_excerpt"][:120])) for k in ("hindsight","hermes")]; \
+	print("  round_trip_ok =", d["round_trip_ok"]); sys.exit(0 if d["round_trip_ok"] else 1)'
+
+webhook-log: ## Show the last deliveries recorded by the relay (GET /log)
+	@curl -sS "http://localhost:$(WEBHOOK_TEST_PORT)/log" | python3 -m json.tool

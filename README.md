@@ -27,6 +27,7 @@ losing the agent's memory, plugins or profiles.
 - [Long-term memory (Hindsight)](#long-term-memory-hindsight)
 - [Inference routing (OmniRoute)](#inference-routing-omniroute)
 - [Observability (Langfuse)](#observability-langfuse)
+- [Webhook relay test](#webhook-relay-test)
 - [Operational runbook / troubleshooting](#operational-runbook--troubleshooting)
 - [Documentation in `docs/`](#documentation-in-docs)
 
@@ -312,6 +313,7 @@ no "0 means forever"; passing `0` fails startup outright.
 | `8888` | hindsight | REST API + per-bank MCP endpoint `/mcp/{bank_id}/` |
 | `9999` | hindsight | Memory explorer UI (knowledge-graph browser) |
 | `3000` | langfuse-web | UI + OTLP ingest endpoint |
+| `8777` | webhook-test | Webhook relay (optional, `make webhook-up`) |
 
 The remaining Langfuse stores are reachable only on `hermes-net`.
 
@@ -370,11 +372,12 @@ immutable commit SHA) and persists in `./data/plugins` on the host, surviving
 | Target | Does |
 |---|---|
 | `setup-dirs` | Create `./data`, `./workspace`, `./data-gtw`, `./data/hindsight`; fix permissions; copy `.env.example` → `.env` if absent |
-| `build` | `docker compose build` |
-| `up` | `docker compose up -d`, then repair ownership on `/opt/data/installs` |
+| `build` | `local-images`, then `docker compose build` |
+| `up` | `local-images`, `docker compose up -d`, then repair ownership on `/opt/data/installs` |
+| `local-images` | Build whichever locally derived image `.env` selects (`hindsight-patched:local`, `omniroute-browser:local`) and the daemon is missing. Neither has a `build:` stanza in compose, so without this `up` tries to **pull** them and dies with `pull access denied ... repository does not exist` |
 | `down` | `docker compose down` |
 | `restart` | `down` then `up` |
-| `update-image` | `docker compose pull` + `up -d --force-recreate` |
+| `update-image` | `local-images`, `docker compose pull --ignore-pull-failures` + `up -d --force-recreate` (the `:local` tags have no registry to pull from) |
 | `clean` | `docker compose down --remove-orphans -v` (keeps `./data`) |
 | `destroy` | **Destructive, prompts:** `down -v --rmi all` and `rm -rf ./data ./workspace` |
 
@@ -456,6 +459,15 @@ immutable commit SHA) and persists in `./data/plugins` on the host, surviving
 | `langfuse-secrets` | Generate real `LANGFUSE_SALT`, `_NEXTAUTH_SECRET`, `_ENCRYPTION_KEY` into `.env` |
 | `langfuse-reset` | **Destructive, prompts for `reset`:** drop the Langfuse volumes and re-migrate. Scoped by both the compose project label and a `langfuse-` name prefix, so `hindsight-pgdata` and `hermes-installs` are never touched |
 | `langfuse-verify` | Four steps: web health → tracing initialized in the Hindsight log → generate API traffic → count spans in ClickHouse |
+
+### Webhook relay
+
+| Target | Does |
+|---|---|
+| `webhook-up` / `webhook-down` | Start / remove the opt-in relay container (profile `webhook`) |
+| `webhook-test` | `POST /hook` with a sample payload; prints the Hindsight and Hermes legs and exits non-zero unless both succeed |
+| `webhook-log` | `GET /log`, pretty-printed |
+| `webhook-logs` | Tail the relay container log |
 
 ---
 
@@ -588,6 +600,9 @@ the dashboard.
 ### `docker/Dockerfile.omniroute` — OmniRoute + Chromium
 `make omniroute-browser-build` → set `OMNIROUTE_IMAGE=omniroute-browser:local`
 
+Once `.env` names that tag, `make up` builds the image itself if it is missing
+(via `local-images`) — there is no registry to pull it from.
+
 The published image ships the `playwright` npm package but **not** the Chromium
 binary, and its biggest keyless provider drives a real browser. Without
 Chromium every free-tier request fails with HTTP 503 ("Cloudflare Playground
@@ -606,7 +621,8 @@ published upstream, so this adds the runtime in a derived layer:
 
 ### `docker/Dockerfile.hindsight` — tolerant consolidation parsing
 `make hindsight-patched-build` → set `HINDSIGHT_IMAGE=hindsight-patched`,
-`HINDSIGHT_VERSION=local`
+`HINDSIGHT_VERSION=local` (which `.env.example` already does, so `make up`
+builds this image on a fresh clone via `local-images`)
 
 Applies `hindsight-tolerant-batch.patch.py`, which adds a narrow
 `model_validator(mode="before")` that salvages genuine actions from a bare JSON
@@ -739,6 +755,40 @@ Two details worth knowing:
   The exporter retries in the background, so a Langfuse outage must not be able
   to take long-term memory down with it. Spans buffered during an outage are
   dropped once the queue fills; memory itself keeps working.
+
+---
+
+## Webhook relay test
+
+Hindsight has no native webhook or subscription endpoint, so "a webhook between
+Hindsight and Hermes" is a test harness, not a product feature: a tiny
+stdlib-only Python receiver (`docker/webhook-test.py`, run on `python:3.12-slim`
+with the file bind-mounted, so there is nothing to build). It sits behind the
+`webhook` compose profile, so `make up` never starts it.
+
+| Endpoint | Does |
+|---|---|
+| `POST /hook` | Logs the delivery, calls Hindsight (`memories/recall`, read-only) and Hermes (`/v1/chat/completions`) **in parallel**, returns one JSON report with each leg's status, latency and body excerpt |
+| `GET /log` | Last 50 deliveries, newest first |
+| `GET /health` | Liveness (compose healthcheck) |
+
+Because the legs are independent, a failure is attributable to one side:
+`hindsight.ok=false` means the relay cannot reach Hindsight; `hermes.ok=false`
+means it cannot reach (or is not authorised by) Hermes.
+
+```bash
+make webhook-up      # start the relay on :8777
+make webhook-test    # fire a sample delivery, print both legs
+make webhook-log     # GET /log
+make webhook-logs    # tail the container log
+make webhook-down    # remove it
+```
+
+The Hermes leg needs `API_SERVER_ENABLED=true` **and a non-empty
+`API_SERVER_KEY`** in `.env` — an empty key makes Hermes answer every request
+with `Invalid gateway API key`. After setting it, recreate Hermes
+(`docker compose up -d hermes`). Port, model and timeout are
+`WEBHOOK_TEST_PORT`, `WEBHOOK_HERMES_MODEL` and `WEBHOOK_TIMEOUT`.
 
 ---
 

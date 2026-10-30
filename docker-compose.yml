@@ -79,7 +79,7 @@ services:
       - HINDSIGHT_API_LLM_PROVIDER=${HINDSIGHT_API_LLM_PROVIDER:-openai}
       - HINDSIGHT_API_LLM_BASE_URL=${HINDSIGHT_API_LLM_BASE_URL:-http://omniroute:20128/v1}
       - HINDSIGHT_API_LLM_API_KEY=${HINDSIGHT_API_LLM_API_KEY:-${GTW_API_KEY:-omniroute-local}}
-      - HINDSIGHT_API_LLM_MODEL=${HINDSIGHT_API_LLM_MODEL:-auto/best-free}
+      - HINDSIGHT_API_LLM_MODEL=${HINDSIGHT_API_LLM_MODEL:-auto/gemini}
       # Enables POST /v1/default/banks/{bank}/health/llm, which makes a real
       # call through to the configured LLM. `make hindsight-llm-check` uses it
       # to prove the Hindsight -> OmniRoute -> upstream leg end to end.
@@ -524,6 +524,41 @@ services:
       timeout: 5s
       retries: 40
       start_period: 180s
+
+  # ============================================================================
+  # webhook-test — OPTIONAL relay that proves hermes <-> hindsight reachability
+  #
+  # Hindsight has no native webhook endpoint, so this tiny stdlib-only receiver
+  # stands in: POST /hook logs the delivery, then calls Hindsight (recall) and
+  # Hermes (/v1/chat/completions) and reports each leg's status separately.
+  # Behind the `webhook` profile, so `make up` never starts it. Run it with
+  # `make webhook-up`; exercise it with `make webhook-test`.
+  # ============================================================================
+  webhook-test:
+    image: ${WEBHOOK_TEST_IMAGE:-python:3.12-slim}
+    container_name: ${CONTAINER_NAME:-hermes-agent}-webhook
+    profiles: ["webhook"]
+    restart: unless-stopped
+    networks: [hermes-net]
+    command: ["python", "-u", "/app/webhook-test.py"]
+    volumes:
+      - ./docker/webhook-test.py:/app/webhook-test.py:ro
+    ports:
+      - "${WEBHOOK_TEST_PORT:-8777}:8777"
+    environment:
+      - WEBHOOK_TEST_PORT=8777
+      - HINDSIGHT_API_URL=http://hindsight:8888
+      - HINDSIGHT_API_KEY=${HINDSIGHT_API_KEY:-}
+      - HINDSIGHT_BANK_ID=${HINDSIGHT_BANK_ID:-hermes-course}
+      - WEBHOOK_HERMES_URL=http://hermes:8642
+      - WEBHOOK_HERMES_MODEL=${WEBHOOK_HERMES_MODEL:-hermes-agent}
+      - API_SERVER_KEY=${API_SERVER_KEY:-}
+      - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-60}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8777/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
 networks:
   hermes-net:
